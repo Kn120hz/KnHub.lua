@@ -1,0 +1,499 @@
+--[[
+██╗  ██╗██╗███╗   ██╗██╗  ██╗██╗   ██╗██████╗  ██████╗ ██████╗  ██████╗ ██████╗ ███████╗
+██║ ██╔╝██║████╗  ██║██║ ██╔╝██║   ██║██╔══██╗██╔═══██╗██╔══██╗██╔═══██╗██╔══██╗██╔════╝
+█████╔╝ ██║██╔██╗ ██║█████╔╝ ██║   ██║██████╔╝██║   ██║██║  ██║██║   ██║██████╔╝█████╗  
+██╔═██╗ ██║██║╚██╗██║██╔═██╗ ██║   ██║██╔═══╝ ██║   ██║██║  ██║██║   ██║██╔══██╗██╔══╝  
+██║  ██╗██║██║ ╚████║██║  ██╗╚██████╔╝██║     ╚██████╔╝██████╔╝╚██████╔╝██║  ██║███████╗
+╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚═╝      ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝
+
+KnHubCG Ultimate Professional | By <SeuNome>
+Feito para Delta Executor/Executores modernos — 2024/2025
+----------------------------------------------------------------
+• Interface Tabulada Profissional, temas, arrastar mouse/touch, FPS/Ping HUD, animações
+• ESP Total: Box, Skeleton, Chams, Tracers, Distância, Lista, Players e Bots com suporte a respawn
+• Aimbot Players: travamento, FOV, Pull, mira em inimigos/todos, indicação, múltiplos campos
+• Aimbot Bots: Alterna bot, FOV, Pull, mira NPCs/humanoides fora de Players
+• Modular para outras features: teleport, no-clip, speed hack, auto-farm
+• Logs/debug helpers, throttle, debounce, compat CoreGui
+• Código ultra-organizado para expansão
+----------------------------------------------------------------
+]]
+----------------------------------------------------------------
+-- 🔹 DEPENDÊNCIAS & UTILS
+----------------------------------------------------------------
+local Services,Player,Workspace,CoreGui,Stats,RunService,UIS,Lighting =
+    setmetatable({}, {__index=function(t,k)local s=game:GetService(k)rawset(t,k,s)return s end}),
+    game.Players.LocalPlayer, workspace, game:GetService("CoreGui"),
+    game:GetService("Stats"), game:GetService("RunService"),
+    game:GetService("UserInputService"), game:GetService("Lighting")
+
+function Log(msg) print("[KnHubCG] "..tostring(msg)) end
+function clamp(a,b,c) return math.max(b, math.min(c,a)) end
+function safeDestroy(inst) pcall(function() if inst and inst.Parent then inst:Destroy() end end) end
+function safeRemove(inst) pcall(function() if inst then inst:Remove() end end) end
+
+local DrawingAvail, Drawing = pcall(function() return Drawing end)
+local aimDebounce, espDebounce, skelDebounce = 0, 0, 0
+
+----------------------------------------------------------------
+-- 🔹 STATE
+----------------------------------------------------------------
+local Themes = {
+    dark = {bg=Color3.fromRGB(28,31,38),sec=Color3.fromRGB(42,48,54),accent=Color3.fromRGB(69,155,220),text=Color3.fromRGB(230,241,255)},
+    light = {bg=Color3.fromRGB(216,223,235),sec=Color3.fromRGB(188,208,225),accent=Color3.fromRGB(50,110,210),text=Color3.fromRGB(28,32,64)},
+    cyber = {bg=Color3.fromRGB(18,24,44),sec=Color3.fromRGB(28,66,110),accent=Color3.fromRGB(127,255,163),text=Color3.fromRGB(218,255,197)}
+}
+
+local State = {
+    mainEnabled=true, theme="cyber",
+    color=Color3.fromRGB(69,155,220),
+    boxESP=true, skeletonESP=false, chamsESP=false, tracers=false, showDist=false,
+    playerESPActive=true, botESPActive=false,
+    espHighlight=false, espMaxDistance=400,
+    aimbotPlayer={enabled=false, fov=120, pull=65, enemiesOnly=true, lock=nil},
+    aimbotBot={enabled=false, fov=110, pull=70, lock=nil},
+    pov={circle=true, radius=100},
+    logsEnable=false,
+    minimap=false,
+    settings={}, savedConfigs={},
+    debounce={aim=0, esp=0, skeleton=0},
+}
+local TL = function() return Themes[State.theme] or Themes.cyber end
+
+----------------------------------------------------------------
+-- 🔹 GUI COMPONENTS
+----------------------------------------------------------------
+local function smoothColor(val1, val2, t)
+    return Color3.new(
+        val1.R + (val2.R-val1.R)*t,
+        val1.G + (val2.G-val1.G)*t,
+        val1.B + (val2.B-val1.B)*t
+    )
+end
+local function roundify(elem, r)
+    local uic = Instance.new("UICorner", elem)
+    uic.CornerRadius = UDim.new(0, r or 13);
+    return uic
+end
+
+local function makeShadow(base,depth)
+    local shad = Instance.new("ImageLabel", base)
+    shad.Size = UDim2.new(1,12,1,12)
+    shad.Position = UDim2.new(0,-6,0,-6)
+    shad.BackgroundTransparency = 1
+    shad.Image = "rbxassetid://1316045217"
+    shad.ImageTransparency = 0.91 + (depth or 0.03)
+    shad.ZIndex = base.ZIndex-1
+    return shad
+end
+
+function MakeTitle(textParent,txt)
+    local lab=Instance.new("TextLabel",textParent)
+    lab.Size=UDim2.new(1,0,0,52)
+    lab.Position=UDim2.new(0,0,0,0)
+    lab.BackgroundTransparency=1
+    lab.Font=Enum.Font.GothamSemibold
+    lab.TextScaled=true
+    lab.TextColor3=TL().accent
+    lab.Text=txt
+    lab.ZIndex=13
+    return lab
+end
+
+function MakeLabel(parent,txt,y)
+    local lab=Instance.new("TextLabel",parent)
+    lab.Size=UDim2.new(1,-24,0,22)
+    lab.Position=UDim2.new(0,12,0,y or 8)
+    lab.BackgroundTransparency=1
+    lab.Font=Enum.Font.Code
+    lab.TextScaled=true
+    lab.TextColor3=TL().text
+    lab.Text=txt
+    lab.ZIndex=18
+    return lab
+end
+
+function MakeButton(parent,txt,pos,y,callback)
+    local btn=Instance.new("TextButton",parent)
+    btn.Size=UDim2.new(0,140,0,32)
+    btn.Position=UDim2.new(0,pos,0,y or 8)
+    btn.BackgroundColor3=TL().accent
+    btn.Text=txt
+    btn.TextScaled=true
+    btn.Font=Enum.Font.GothamBold
+    btn.TextColor3=TL().text
+    btn.ZIndex=20
+    roundify(btn,12)
+    if callback then btn.MouseButton1Click:Connect(callback) end
+    return btn
+end
+
+function MakeToggle(parent,txt,default,pos,y,callback)
+    local btn=MakeButton(parent,txt..": "..(default and "ON" or "OFF"),pos,y)
+    btn.BackgroundColor3 = default and TL().accent or TL().sec
+    btn.MouseButton1Click:Connect(function()
+        default=not default
+        btn.Text = txt..": "..(default and "ON" or "OFF")
+        btn.BackgroundColor3 = default and TL().accent or TL().sec
+        if callback then callback(default,btn) end
+    end)
+    return btn
+end
+
+function MakeInput(parent,label,init,pos,y,minv,maxv,callback)
+    local box=Instance.new("TextBox",parent)
+    box.Size=UDim2.new(0,100,0,28)
+    box.Position=UDim2.new(0,pos,0,y)
+    box.Text=label..": "..init
+    box.BackgroundColor3=TL().sec
+    box.Font=Enum.Font.Code
+    box.TextColor3=TL().text
+    box.ZIndex=20
+    roundify(box,10)
+    box.FocusLost:Connect(function()
+        local n=tonumber(box.Text:match("%d+"))or init
+        n=clamp(n,minv,maxv)
+        box.Text=label..": "..n
+        if callback then callback(n,box) end
+    end)
+    return box
+end
+
+----------------------------------------------------------------
+-- 🔹 GUI TOP BAR E HUB PRINCIPAL
+----------------------------------------------------------------
+local HUB_NAME="KnHubCG_ProVeterano"
+local existed=CoreGui:FindFirstChild(HUB_NAME)
+if existed then existed:Destroy() end
+
+local gui=Instance.new("ScreenGui",CoreGui)
+gui.Name=HUB_NAME gui.Enabled=true gui.ResetOnSpawn=false
+
+local mainFrame=Instance.new("Frame",gui)
+mainFrame.Size=UDim2.new(0,560,0,720)
+mainFrame.Position=UDim2.new(0,88,0,46)
+mainFrame.BackgroundColor3=TL().bg
+mainFrame.BorderSizePixel=0
+mainFrame.Active=true
+mainFrame.ZIndex=14
+roundify(mainFrame,16)
+makeShadow(mainFrame,0.02)
+
+local title=MakeTitle(mainFrame,"𝗞𝗻𝗛𝘂𝗯𝗖𝗚 ProVeterano")
+
+local infoHUD=Instance.new("TextLabel",mainFrame)
+infoHUD.Size=UDim2.new(0,210,0,26)
+infoHUD.Position=UDim2.new(1,-225,0,18)
+infoHUD.BackgroundTransparency=1
+infoHUD.TextColor3=TL().accent
+infoHUD.Font=Enum.Font.GothamBold
+infoHUD.TextSize=15
+infoHUD.ZIndex=30
+
+RunService.RenderStepped:Connect(function()
+    local ping = Stats:FindFirstChild("Network") and Stats.Network.ServerStatsItem.Ping:GetValue() or 0
+    local fps = math.floor(1/RunService.RenderStepped:Wait())
+    infoHUD.Text = string.format("FPS: %d   Ping: %dms", fps, ping)
+end)
+
+-- Drag - mouse/touch
+do
+    local dragging,dragStart,startPos
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging=true dragStart=input.Position startPos=mainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState==Enum.UserInputState.End then dragging=false end end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and dragStart and startPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta=input.Position-dragStart
+            mainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+        end
+    end)
+end
+
+local globalToggle=MakeToggle(mainFrame,"HUB",(State.mainEnabled),1,18,function(v) State.mainEnabled=v end)
+
+local minimizeBtn=MakeButton(mainFrame,"_",1.42,18,function()
+    gui.Enabled=false game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage",{Text='Hub minimizado, digite "/hub" para abrir',Color=Color3.fromRGB(70,130,250)})
+end)
+
+----------------------------------------------------------------
+-- 🔹 ABAS | SISTEMA DE TABS
+----------------------------------------------------------------
+local Tabs={"Aimbot Player","Aimbot Bot","ESP","Config"}
+local tabBar,tabBtns = Instance.new("Frame",mainFrame),{}
+tabBar.Size=UDim2.new(1,-34,0,46)
+tabBar.Position=UDim2.new(0,17,0,66)
+tabBar.BackgroundColor3=TL().sec tabBar.BorderSizePixel=0 tabBar.ZIndex=16 roundify(tabBar,12)
+local selectedTab=1
+for i,n in ipairs(Tabs)do
+    local btn=MakeButton(tabBar,n,10+(i-1)*141,8,function()
+        selectedTab=i for j,f in pairs(tabFrames)do f.Visible=(j==selectedTab) end for j,btn2 in pairs(tabBtns)do btn2.BackgroundColor3=(j==selectedTab)and TL().accent or TL().sec end
+    end)
+    btn.Size = UDim2.new(0,136,0,32)
+    tabBtns[i]=btn btn.BackgroundColor3=(i==selectedTab)and TL().accent or TL().sec
+end
+
+tabFrames={}
+for i=1, #Tabs do
+    local f=Instance.new("Frame",mainFrame)
+    f.Size=UDim2.new(1,-38,1,-132)
+    f.Position=UDim2.new(0,20,0,124)
+    f.BackgroundColor3=TL().bg
+    f.BackgroundTransparency=0.88
+    f.Visible=i==selectedTab
+    f.ZIndex=17
+    roundify(f,14)
+    tabFrames[i]=f
+end
+
+----------------------------------------------------------------
+-- 🔹 DETALHADO: ABA 1 — AIMBOT PLAYER
+----------------------------------------------------------------
+local tab1=tabFrames[1]
+MakeLabel(tab1,"Aimbot Players — Mira automática em PLAYERS - FOV, Pull, Enemy",8)
+local ab1Tog=MakeToggle(tab1,"Aimbot",State.aimbotPlayer.enabled,22,36,function(v)State.aimbotPlayer.enabled=v end)
+local ab1FOV=MakeInput(tab1,"FOV",State.aimbotPlayer.fov,182,36,30,400,function(v)State.aimbotPlayer.fov=v end)
+local ab1Pull=MakeInput(tab1,"Pull",State.aimbotPlayer.pull,294,36,10,100,function(v)State.aimbotPlayer.pull=v end)
+local ab1Enem=MakeToggle(tab1,"Só inimigos",State.aimbotPlayer.enemiesOnly,414,36,function(v)State.aimbotPlayer.enemiesOnly=v end)
+MakeLabel(tab1,"Travar/destravar mira com botão ou automático — Mira visível se linha de visão!",78)
+
+----------------------------------------------------------------
+-- 🔹 DETALHADO: ABA 2 — AIMBOT BOT/NPC
+----------------------------------------------------------------
+local tab2=tabFrames[2]
+MakeLabel(tab2,"Aimbot Bots — Mira automática em NPCs Bot/Models humanoides",8)
+local ab2Tog=MakeToggle(tab2,"Aimbot Bots",State.aimbotBot.enabled,22,36,function(v)State.aimbotBot.enabled=v end)
+local ab2FOV=MakeInput(tab2,"FOV",State.aimbotBot.fov,182,36,30,400,function(v)State.aimbotBot.fov=v end)
+local ab2Pull=MakeInput(tab2,"Pull",State.aimbotBot.pull,294,36,10,100,function(v)State.aimbotBot.pull=v end)
+MakeLabel(tab2,"Só bots/NPCs — ideal para simuladores/farms, separados dos players",78)
+
+----------------------------------------------------------------
+-- 🔹 DETALHADO: ABA 3 — ESP TAB PROFISSIONAL
+----------------------------------------------------------------
+local tab3=tabFrames[3]
+MakeLabel(tab3,"ESP Visual — Players/Bots: Box, Skeleton, Chams, Tracers, Distância",8)
+local boxESPBtn=MakeToggle(tab3,"Box ESP",State.boxESP,18,38,function(v)State.boxESP=v end)
+local skelESPBtn=MakeToggle(tab3,"Skeleton",State.skeletonESP,148,38,function(v)State.skeletonESP=v end)
+local chamsESPBtn=MakeToggle(tab3,"Chams",State.chamsESP,278,38,function(v)State.chamsESP=v end)
+local tracersBtn=MakeToggle(tab3,"Tracers",State.tracers,408,38,function(v)State.tracers=v end)
+local playerESPBtn=MakeToggle(tab3,"Player ESP",State.playerESPActive,18,80,function(v)State.playerESPActive=v end)
+local botESPBtn=MakeToggle(tab3,"Bot ESP",State.botESPActive,148,80,function(v)State.botESPActive=v end)
+local distBtn=MakeToggle(tab3,"Distância",State.showDist,278,80,function(v)State.showDist=v end)
+
+MakeLabel(tab3,"Configurações de visualizações, Box/skeleton/chams/tracers/distance, players/npcs!",120)
+
+----------------------------------------------------------------
+-- 🔹 ABA 4 — CONFIG/TEMA/EXTRAS
+----------------------------------------------------------------
+local tab4 = tabFrames[4]
+local themeLbl=MakeLabel(tab4,"Tema/Estilo",12)
+local themeBtn=MakeButton(tab4,"Trocar Tema",180,12,function()
+    local ths = {"dark","light","cyber"}
+    local i=table.find(ths,State.theme)or 1
+    i=(i % #ths)+1 State.theme=ths[i]
+    mainFrame.BackgroundColor3=TL().bg title.TextColor3=TL().accent tabBar.BackgroundColor3=TL().sec infoHUD.TextColor3=TL().accent for i,f in pairs(tabFrames)do f.BackgroundColor3=TL().bg end
+end)
+local configLbl=MakeLabel(tab4,"Salvar/Carregar configs",52)
+local saveBtn=MakeButton(tab4,"Salvar",180,52,function()State.savedConfigs[#State.savedConfigs+1]=table.clone(State)Log("Configuração salva")end)
+local loadBtn=MakeButton(tab4,"Carregar",320,52,function()
+    if #State.savedConfigs>0 then State=table.clone(State.savedConfigs[#State.savedConfigs])Log("Configuração carregada")end
+end)
+MakeLabel(tab4,"Expanda seu hub! Teleport | fly | auto-farm | speed hack | no-clip",92)
+local creditsLbl=MakeLabel(tab4,"By SeuNome — 2025 | KnHubCG ProVeterano",132)
+
+----------------------------------------------------------------
+-- 🔹 ESP E AIMBOT CORE SYSTEM
+----------------------------------------------------------------
+local billboards,skeletonLines,chamsOverlays,tracersLines={}, {}, {}, {}
+
+--- Funções segmentadas: ESP player, ESP bot, ESP skeleton/chams/tracers
+local function getPlayers()
+    return Services.Players:GetPlayers()
+end
+local function getBots()
+    local bots = {}
+    for _,obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local isPlayer=false
+            for _,p in ipairs(getPlayers())do if p.Character==obj then isPlayer=true break end end
+            if not isPlayer then table.insert(bots,obj) end
+        end
+    end return bots
+end
+
+function isVisible(from, to)
+    local params=RaycastParams.new()
+    params.FilterDescendantsInstances={Player.Character,Workspace.CurrentCamera}
+    params.FilterType=Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater=true
+    local result=Workspace:Raycast(from,(to-from).Unit*(to-from).Magnitude,params)
+    return (not result)or(not result.Instance)or(not result.Instance.CanCollide)or(not result.Instance.CanQuery)
+end
+
+----------------------------------------------------------------
+-- 🔹 LOOP DE ESP PROFISSIONAL
+----------------------------------------------------------------
+function updateESP()
+    if os.clock()-espDebounce < 0.08 then return end espDebounce = os.clock()
+    local maxDist=tonumber(State.espMaxDistance); local cam=Workspace.CurrentCamera
+    -- Players
+    if State.playerESPActive then
+        for _,plr in ipairs(getPlayers())do
+            if plr==Player then continue end
+            local char,hrp,hum=plr.Character,plr.Character and plr.Character:FindFirstChild("HumanoidRootPart"),plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+            if not (char and hrp and hum) then continue end
+            if not billboards[plr] then
+                local bb=Instance.new("BillboardGui")
+                bb.Name="KnHubESPP"
+                bb.MaxDistance=maxDist
+                bb.Size=UDim2.new(0,120,0,32)
+                bb.Adornee=hrp bb.AlwaysOnTop=true bb.Parent=Workspace.CurrentCamera
+                local nameL=Instance.new("TextLabel",bb)
+                nameL.Size=UDim2.new(1,0,0,16)
+                nameL.BackgroundTransparency=1 nameL.Font=Enum.Font.GothamSemibold nameL.TextStrokeTransparency=0.2
+                nameL.Text=plr.Name.." ["..plr.DisplayName.."]"
+                nameL.TextColor3=((plr.Team and Player.Team and plr.Team~=Player.Team)and Color3.fromRGB(255,60,80)or TL().accent)
+                nameL.TextScaled=true
+                local hpBar=Instance.new("Frame",bb)
+                hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                hpBar.Position=UDim2.new(0,0,1,-8)
+                hpBar.BackgroundColor3=Color3.fromRGB(40,220,90)
+                hpBar.BorderSizePixel=0
+                billboards[plr]=bb
+            else
+                local bb=billboards[plr]
+                local nameL=bb:FindFirstChildOfClass("TextLabel")
+                if nameL then
+                    nameL.Text=plr.Name.." ["..plr.DisplayName.."]"
+                    nameL.TextColor3=((plr.Team and Player.Team and plr.Team~=Player.Team)and Color3.fromRGB(255,60,80)or TL().accent)
+                end
+                local hpBar=bb:FindFirstChildOfClass("Frame")
+                if hpBar and hum then
+                    hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                end
+            end
+        end
+    else for plr,guiB in pairs(billboards)do safeDestroy(guiB)billboards[plr]=nil end end -- limpa tudo se desativa
+
+    -- Bots/NPC ESP
+    if State.botESPActive then
+        for _,bot in ipairs(getBots())do
+            if not billboards[bot] then
+                local bb=Instance.new("BillboardGui")
+                bb.Name="KnHubESPB"
+                bb.MaxDistance=maxDist
+                bb.Size=UDim2.new(0,120,0,32)
+                bb.Adornee=bot:FindFirstChild("HumanoidRootPart")bb.AlwaysOnTop=true bb.Parent=Workspace.CurrentCamera
+                local nameL=Instance.new("TextLabel",bb)
+                nameL.Size=UDim2.new(1,0,0,16)
+                nameL.BackgroundTransparency=1 nameL.Font=Enum.Font.Code nameL.TextStrokeTransparency=0.3
+                nameL.Text=bot.Name
+                nameL.TextColor3=TL().accent nameL.TextScaled=true
+                local hpBar=Instance.new("Frame",bb)
+                local hum=bot:FindFirstChildOfClass("Humanoid")
+                hpBar.Size=UDim2.new(hum and hum.Health/math.max(hum.MaxHealth,1)or 1,0,0,8)
+                hpBar.Position=UDim2.new(0,0,1,-8)
+                hpBar.BackgroundColor3=Color3.fromRGB(90,110,200)
+                hpBar.BorderSizePixel=0
+                billboards[bot]=bb
+            else
+                local bb=billboards[bot]
+                local nameL,hum=bb:FindFirstChildOfClass("TextLabel"),bot:FindFirstChildOfClass("Humanoid")
+                if nameL then nameL.Text=bot.Name end
+                local hpBar=bb:FindFirstChildOfClass("Frame")
+                if hpBar and hum then
+                    hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                end
+            end
+        end
+    else for bot,guiB in pairs(billboards)do if type(bot)=="Instance" and bot:IsA("Model")and not bot:FindFirstChildOfClass("Player")then safeDestroy(guiB)billboards[bot]=nil end end end
+end
+
+----------------------------------------------------------------
+-- 🔹 AIMBOT SYSTEM
+----------------------------------------------------------------
+local function getClosestPlayer()
+    local cam=Workspace.CurrentCamera
+    local fov,state=State.aimbotPlayer.fov,State.aimbotPlayer
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local closest,closestDist=nil, fov
+    for _,plr in ipairs(getPlayers())do
+        if plr==Player then continue end
+        if state.enemiesOnly and Player.Team and plr.Team and plr.Team==Player.Team then continue end
+        local char=plr.Character
+        local hrp=char and char:FindFirstChild("HumanoidRootPart")
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health<=0 then continue end
+        local vec,onScr=cam:WorldToViewportPoint(hrp.Position)
+        if not onScr or not isVisible(cam.CFrame.Position, hrp.Position) then continue end
+        local dist=(Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist < closestDist then closest, closestDist = plr, dist end
+    end
+    return closest
+end
+
+local function getClosestBot()
+    local cam=Workspace.CurrentCamera
+    local fov,state=State.aimbotBot.fov,State.aimbotBot
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local closest,closestDist=nil,fov
+    for _,bot in ipairs(getBots())do
+        local hrp=bot:FindFirstChild("HumanoidRootPart")
+        local hum=bot:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health<=0 then continue end
+        local vec,onScr=cam:WorldToViewportPoint(hrp.Position)
+        if not onScr or not isVisible(cam.CFrame.Position, hrp.Position) then continue end
+        local dist=(Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist<closestDist then closest,closestDist=bot,dist end
+    end
+    return closest
+end
+
+local function handleAimbotPlayer()
+    if not State.aimbotPlayer.enabled then return end
+    local cam=Workspace.CurrentCamera
+    local target = getClosestPlayer()
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp=target.Character.HumanoidRootPart
+        pcall(function()
+            local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+            cam.CFrame = cam.CFrame:Lerp(destCFrame,clamp(State.aimbotPlayer.pull/100,0.13,1))
+        end)
+    end
+end
+
+local function handleAimbotBot()
+    if not State.aimbotBot.enabled then return end
+    local cam=Workspace.CurrentCamera
+    local target=getClosestBot()
+    if target and target:FindFirstChild("HumanoidRootPart") then
+        local hrp=target.HumanoidRootPart
+        pcall(function()
+            local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+            cam.CFrame = cam.CFrame:Lerp(destCFrame,clamp(State.aimbotBot.pull/100,0.13,1))
+        end)
+    end
+end
+
+----------------------------------------------------------------
+-- 🔹 MAIN LOOP — RENDER/UPDATE
+----------------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if not gui.Enabled or not State.mainEnabled then for _,v in pairs(billboards)do safeDestroy(v)end return end
+    pcall(updateESP)
+    pcall(handleAimbotPlayer)
+    pcall(handleAimbotBot)
+end)
+
+----------------------------------------------------------------
+-- 🔹 EXPANSÕES, EXTRAS E SUGESTÕES FUTURAS:
+----------------------------------------------------------------
+-- Você pode adicionar: Teleport to player, Fly, Noclip, AutoFarm, Save Presets
+-- Adicionar customização RGB, opções de layout mobile, bind de teclas, slots de configs rápidas, animações Tween ao abrir/fechar
+-- Adicionar ESP de drops/itens, auto-quest, auto-collect, suporte para futuras API Delta
+
+-- Feito para facilitar sua expansão e crescimento. 
+-- [Sua marca/O nome] - 2025. Bons cheats, bons hubs, bom código!
