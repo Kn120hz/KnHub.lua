@@ -1,0 +1,501 @@
+--[[
+███╗   ██╗██╗  ██╗██╗   ██╗██╗   ██╗██████╗  ██████╗ ██████╗  ██████╗ ██████╗ ███████╗
+████╗  ██║██║  ██║██║   ██║██║   ██║██╔══██╗██╔═══██╗██╔══██╗██╔═══██╗██╔══██╗██╔════╝
+██╔██╗ ██║███████║██║   ██║██║   ██║██████╔╝██║   ██║██║  ██║██║   ██║██████╔╝█████╗  
+██║╚██╗██║██╔══██║██║   ██║██║   ██║██╔═══╝ ██║   ██║██║  ██║██║   ██║██╔══██╗██╔══╝  
+██║ ╚████║██║  ██║╚██████╔╝╚██████╔╝██║     ╚██████╔╝██████╔╝╚██████╔╝██║  ██║███████╗
+╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝      ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝
+
+KnHubCG UltraVeterano | Delta Executor Roblox | 2025
+-------------------------------------------------------------------------------
+HUB profissional: AimPlayers, AimBots, ESP completo, GUI animada/tabulada, temas,
+drag touch/mouse, FPS/Ping HUD, grupos e presets, cleanups, expansão fácil.
+------------------------------------------------------------------------------
+]]
+
+---------------------------------------------------------------------- 
+-- 01 | Dependências/Serviços e Utilidades Universais 
+----------------------------------------------------------------------
+local Services = setmetatable({}, {__index = function(t,k) local s=game:GetService(k)rawset(t,k,s)return s end})
+local Players,Player,Workspace,CoreGui,UIS,RunService,Stats =
+    Services.Players,Services.Players.LocalPlayer,workspace,game:GetService("CoreGui"),
+    game:GetService("UserInputService"),game:GetService("RunService"),game:GetService("Stats")
+
+local function clamp(n,min,max) return math.max(min,math.min(max,n)) end
+
+--[[
+Função: isEnemy
+Descrição: Retorna se o alvo é inimigo (Team diferente). Adapta para jogos sem Team.
+]]
+local function isEnemy(plr)
+    return Player.Team and plr.Team and Player.Team~=plr.Team
+end
+
+local function safeDestroy(inst) pcall(function() if inst and inst.Parent then inst:Destroy() end end) end
+local function safeRemove(inst) pcall(function() if inst then inst:Remove() end end) end
+
+---------------------------------------------------------------------- 
+-- 02 | Variáveis Globais de Estado e Tema/configs 
+----------------------------------------------------------------------
+local Themes = {
+    dark    = {bg=Color3.fromRGB(27,29,38),sec=Color3.fromRGB(41,48,59),accent=Color3.fromRGB(60,150,220),text=Color3.fromRGB(230,241,255),hover=Color3.fromRGB(80,120,180)},
+    light   = {bg=Color3.fromRGB(220,229,243),sec=Color3.fromRGB(195,209,224),accent=Color3.fromRGB(95,169,255),text=Color3.fromRGB(48,58,98),hover=Color3.fromRGB(125,169,225)},
+    cyber   = {bg=Color3.fromRGB(24,34,37),sec=Color3.fromRGB(36,70,80),accent=Color3.fromRGB(130,220,130),text=Color3.fromRGB(200,255,200),hover=Color3.fromRGB(180,245,180)}
+}
+local State = {
+    mainEnabled      = true,
+    theme            = "cyber",
+    espMaxDistance   = 400,
+    boxESP           = true,
+    skeletonESP      = false,
+    chamsESP         = false,
+    tracers          = false,
+    showDist         = false,
+    playerESP        = true,
+    botESP           = true,
+    debugMode        = false,
+    aimbotPlayer     = {enabled=false, fov=120, pull=60, enemiesOnly=true, lock=nil},
+    aimbotBot        = {enabled=false, fov=120, pull=60, lock=nil},
+    pov              = {enabled=true, radius=105},
+    debounce         = {aim=0, esp=0, skeleton=0},
+    configs          = {},
+}
+local getTheme = function() return Themes[State.theme] or Themes.cyber end
+
+---------------------------------------------------------------------- 
+-- 03 | UI Helpers: cores, shadow, roundify, etc
+---------------------------------------------------------------------- 
+local function roundify(elem, r)
+    local uic = Instance.new("UICorner",elem)
+    uic.CornerRadius = UDim.new(0, r or 13)
+    return uic
+end
+local function makeShadow(base,dep)
+    local sh=Instance.new("ImageLabel",base)
+    sh.Size=UDim2.new(1,10,1,10)
+    sh.Position=UDim2.new(0,-5,0,-5)
+    sh.Image="rbxassetid://1316045217"
+    sh.ImageTransparency=0.91+(dep or 0.04)
+    sh.ZIndex=base.ZIndex-1
+    return sh
+end
+
+---------------------------------------------------------------------- 
+-- 04 | GUI Criação da base, arrastar mouse/touch, FPS/Ping HUD
+---------------------------------------------------------------------- 
+local HUBNAME = "KnHubCG_UltraVeterano"
+local existedui = CoreGui:FindFirstChild(HUBNAME)
+if existedui then existedui:Destroy() end
+
+local gui = Instance.new("ScreenGui", CoreGui)
+gui.Name = HUBNAME gui.ResetOnSpawn = false gui.Enabled = true
+
+local mainFrame = Instance.new("Frame", gui)
+mainFrame.Size = UDim2.new(0,570,0,720)
+mainFrame.Position = UDim2.new(0,75,0,43)
+mainFrame.BackgroundColor3 = getTheme().bg
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.ZIndex = 14
+roundify(mainFrame,15)
+makeShadow(mainFrame)
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1,0,0,55)
+title.Position = UDim2.new(0,0,0,0)
+title.BackgroundColor3 = getTheme().accent
+title.Text = "𝗞𝗻𝗛𝘂𝗯𝗖𝗚 ULTRA VETERANO"
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.TextColor3 = getTheme().text
+title.ZIndex = 15
+roundify(title,15)
+
+-- HUD FPS/Ping
+local infoHUD = Instance.new("TextLabel", mainFrame)
+infoHUD.Size = UDim2.new(0,220,0,28)
+infoHUD.Position = UDim2.new(1,-235,0,15)
+infoHUD.BackgroundTransparency = 1
+infoHUD.TextColor3 = getTheme().hover
+infoHUD.Font = Enum.Font.GothamBold
+infoHUD.TextSize = 16
+infoHUD.ZIndex = 30
+RunService.RenderStepped:Connect(function()
+    local ping = Stats:FindFirstChild("Network") and Stats.Network.ServerStatsItem.Ping:GetValue() or 0
+    local fps = math.floor(1/RunService.RenderStepped:Wait())
+    infoHUD.Text = string.format("FPS: %d   Ping: %dms", fps, ping)
+end)
+-- Arrastar Hub mouse/touch
+do
+    local dragging,dragStart,startPos
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging=true dragStart=input.Position startPos=mainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState==Enum.UserInputState.End then dragging=false end end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and dragStart and startPos and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
+            local delta=input.Position-dragStart
+            mainFrame.Position=UDim2.new(startPos.X.Scale, startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+        end
+    end)
+end
+
+---------------------------------------------------------------------- 
+-- 05 | Abas/tabs alinhadas no topo e frames para cada seção
+---------------------------------------------------------------------- 
+local Tabs = {"AimPlayers","AimBots","ESP","Config"}
+local tabBar,tabBtns = Instance.new("Frame",mainFrame),{}
+tabBar.Size = UDim2.new(1,-34,0,45)
+tabBar.Position = UDim2.new(0,17,0,60)
+tabBar.BackgroundColor3 = getTheme().sec tabBar.BorderSizePixel = 0 tabBar.ZIndex = 16 roundify(tabBar,12)
+local selectedTab = 1
+for i,n in ipairs(Tabs)do
+    local btn = Instance.new("TextButton",tabBar)
+    btn.Size = UDim2.new(0,132,0,30)
+    btn.Position = UDim2.new(0,10+(i-1)*136,0,7)
+    btn.BackgroundColor3 = (i==selectedTab)and getTheme().accent or getTheme().sec
+    btn.Text = n btn.Font = Enum.Font.GothamBold btn.TextScaled = true btn.TextColor3 = getTheme().text btn.ZIndex = 17 roundify(btn,12)
+    tabBtns[i]=btn
+    btn.MouseButton1Click:Connect(function()
+        selectedTab=i for j,f in pairs(tabFrames)do f.Visible=(j==selectedTab) end for j,btn2 in pairs(tabBtns)do btn2.BackgroundColor3=(j==selectedTab)and getTheme().accent or getTheme().sec end
+    end)
+end
+tabFrames={}
+for i=1, #Tabs do
+    local f = Instance.new("Frame",mainFrame)
+    f.Size = UDim2.new(1,-36,1,-142)
+    f.Position = UDim2.new(0,18,0,132)
+    f.BackgroundColor3 = getTheme().bg
+    f.BackgroundTransparency = 0.77
+    f.Visible=i==selectedTab f.ZIndex=19 roundify(f,14)
+    tabFrames[i]=f
+end
+
+---------------------------------------------------------------------- 
+-- 06 | Funções helpers para criar botões, toggle, label e input com spacing
+---------------------------------------------------------------------- 
+local function makeLabel(parent,txt,y)
+    local lab=Instance.new("TextLabel",parent)
+    lab.Size=UDim2.new(1,-22,0,26)
+    lab.Position=UDim2.new(0,10,0,y)
+    lab.BackgroundTransparency=1
+    lab.Font=Enum.Font.Code
+    lab.TextScaled=true
+    lab.TextColor3=getTheme().accent
+    lab.Text=txt
+    lab.ZIndex=20
+    return lab
+end
+local function makeToggle(parent,txt,default,pos,y,callback)
+    local btn=Instance.new("TextButton",parent)
+    btn.Size=UDim2.new(0,140,0,32)
+    btn.Position=UDim2.new(0,pos,0,y)
+    btn.BackgroundColor3=default and getTheme().accent or getTheme().sec
+    btn.Text=txt..": "..(default and "ON" or "OFF")
+    btn.Font=Enum.Font.GothamBold
+    btn.TextScaled=true
+    btn.TextColor3=getTheme().text
+    btn.ZIndex=21
+    roundify(btn,10)
+    btn.MouseButton1Click:Connect(function()
+        default=not default
+        btn.Text=txt..": "..(default and "ON" or "OFF")
+        btn.BackgroundColor3=default and getTheme().accent or getTheme().sec
+        if callback then callback(default,btn) end
+    end)
+    return btn
+end
+local function makeInput(parent,label,init,pos,y,minv,maxv,callback)
+    local box=Instance.new("TextBox",parent)
+    box.Size=UDim2.new(0,110,0,30)
+    box.Position=UDim2.new(0,pos,0,y)
+    box.Text=label..": "..init
+    box.BackgroundColor3=getTheme().sec
+    box.Font=Enum.Font.Code
+    box.TextColor3=getTheme().text
+    box.ZIndex=22
+    roundify(box,8)
+    box.FocusLost:Connect(function()
+        local n=tonumber(box.Text:match("%d+"))or init n=clamp(n,minv,maxv) box.Text=label..": "..n
+        if callback then callback(n,box) end
+    end)
+    return box
+end
+
+---------------------------------------------------------------------- 
+-- 07 | Options (botoes/input) das ABAS com spacing vertical organizado
+---------------------------------------------------------------------- 
+-- AimPlayers aba #1
+local tab1,spacing1=tabFrames[1],8
+makeLabel(tab1,"Aimbot Players — Mira nos jogadores:",spacing1) spacing1=spacing1+36
+local ab1Tog=makeToggle(tab1,"Aimbot",State.aimbotPlayer.enabled,22,spacing1,function(v)State.aimbotPlayer.enabled=v end)
+local ab1FOV=makeInput(tab1,"FOV",State.aimbotPlayer.fov,188,spacing1,30,400,function(v)State.aimbotPlayer.fov=v end)
+local ab1Pull=makeInput(tab1,"Pull",State.aimbotPlayer.pull,320,spacing1,10,100,function(v)State.aimbotPlayer.pull=v end)
+local ab1Enem=makeToggle(tab1,"Só inimigos",State.aimbotPlayer.enemiesOnly,438,spacing1,function(v)State.aimbotPlayer.enemiesOnly=v end)
+spacing1=spacing1+40
+makeLabel(tab1,"Status: Travamento inteligente/linha de visão",spacing1) spacing1=spacing1+32
+
+-- AimBots aba #2
+local tab2,spacing2=tabFrames[2],8
+makeLabel(tab2,"Aimbot Bots — Mira em NPCs/Bots:",spacing2) spacing2=spacing2+36
+local ab2Tog=makeToggle(tab2,"Aimbot Bots",State.aimbotBot.enabled,22,spacing2,function(v)State.aimbotBot.enabled=v end)
+local ab2FOV=makeInput(tab2,"FOV",State.aimbotBot.fov,188,spacing2,30,400,function(v)State.aimbotBot.fov=v end)
+local ab2Pull=makeInput(tab2,"Pull",State.aimbotBot.pull,320,spacing2,10,100,function(v)State.aimbotBot.pull=v end)
+spacing2=spacing2+42
+makeLabel(tab2,"Ideal para simuladores/farms",spacing2)
+
+-- ESP aba #3
+local tab3,spacing3=tabFrames[3],8
+makeLabel(tab3,"ESP Visual: Box, Skeleton, Chams, Tracers, Distância:",spacing3) spacing3=spacing3+30
+local boxESPBtn=makeToggle(tab3,"Box ESP",State.boxESP,18,spacing3,function(v)State.boxESP=v end)
+local skelESPBtn=makeToggle(tab3,"Skeleton",State.skeletonESP,168,spacing3,function(v)State.skeletonESP=v end)
+local chamsBtn=makeToggle(tab3,"Chams",State.chamsESP,318,spacing3,function(v)State.chamsESP=v end)
+local tracersBtn=makeToggle(tab3,"Tracers",State.tracers,468,spacing3,function(v)State.tracers=v end)
+spacing3=spacing3+38
+local playerESPBtn=makeToggle(tab3,"Player ESP",State.playerESP,18,spacing3,function(v)State.playerESP=v end)
+local botESPBtn=makeToggle(tab3,"Bot ESP",State.botESP,168,spacing3,function(v)State.botESP=v end)
+local distBtn=makeToggle(tab3,"Distância",State.showDist,318,spacing3,function(v)State.showDist=v end)
+spacing3=spacing3+38
+makeLabel(tab3,"Toggle o que quiser: players/bots/box/visuais!",spacing3)
+
+-- Config/Tema/Extras aba #4
+local tab4,spacing4=tabFrames[4],14
+makeLabel(tab4,"Tema/Estilo do Hub",spacing4)
+local themeBtn=makeToggle(tab4,"Tema",false,188,spacing4,function()
+    local ths = {"dark","light","cyber"}
+    local i=table.find(ths,State.theme)or 1
+    i=(i%#ths)+1 State.theme=ths[i]
+    mainFrame.BackgroundColor3=getTheme().bg title.BackgroundColor3=getTheme().accent tabBar.BackgroundColor3=getTheme().sec infoHUD.TextColor3=getTheme().hover
+    for i,f in pairs(tabFrames)do f.BackgroundColor3=getTheme().bg end
+end)
+spacing4=spacing4+38
+makeLabel(tab4,"Salve sua config! Mais opções de cheats!",spacing4)
+local saveBtn=makeToggle(tab4,"Salvar cfg",false,250,spacing4,function()
+    State.configs[#State.configs+1]=table.clone(State)
+end)
+local loadBtn=makeToggle(tab4,"Carregar cfg",false,420,spacing4,function()if #State.configs>0 then State=table.clone(State.configs[#State.configs])end end)
+
+spacing4=spacing4+44
+makeLabel(tab4,"Adicione: fly, tp, no-clip, auto-farm, color picker",spacing4)
+makeLabel(tab4,"KnHubCG UltraVeterano — ©SeuNome2025",spacing4+36)
+
+---------------------------------------------------------------------- 
+-- 08 | Funções CORE: ESP, AIMBOT, BOT, Skeleton, Chams, Tracers
+---------------------------------------------------------------------- 
+local billboards, skeletonLines, chamsOverlays, tracersLines = {}, {}, {}, {}
+
+local function getPlayers()
+    return Services.Players:GetPlayers()
+end
+local function getBots()
+    local bots={}
+    for _,obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local isPlayer=false
+            for _,p in ipairs(getPlayers())do if p.Character==obj then isPlayer=true break end end
+            if not isPlayer then table.insert(bots,obj) end
+        end
+    end
+    return bots
+end
+
+function isVisible(from,to)
+    local params=RaycastParams.new()
+    params.FilterDescendantsInstances={Player.Character,Workspace.CurrentCamera}
+    params.FilterType=Enum.RaycastFilterType.Blacklist params.IgnoreWater=true
+    local result=Workspace:Raycast(from,(to-from).Unit*(to-from).Magnitude,params)
+    return(not result)or(not result.Instance)or(not result.Instance.CanCollide)
+end
+
+local skeletonPairs = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"}, {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}
+}
+
+function cleanupESP()
+    for k,v in pairs(billboards)do safeDestroy(v) billboards[k]=nil end
+end
+function cleanupSkeleton()
+    for k,v in pairs(skeletonLines)do if v then for _,ln in ipairs(v)do safeRemove(ln)end end skeletonLines[k]=nil end
+end
+
+function updateESP()
+    if os.clock()-State.debounce.esp<0.09 then return end State.debounce.esp=os.clock()
+    local cam = Workspace.CurrentCamera; local maxDist=tonumber(State.espMaxDistance)
+    -- Players
+    if State.playerESP then
+        for _,plr in ipairs(getPlayers())do
+            if plr==Player then continue end
+            local char,hrp,hum=plr.Character,plr.Character and plr.Character:FindFirstChild("HumanoidRootPart"),plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+            if not(char and hrp and hum) then continue end
+            if not billboards[plr] then
+                local bb=Instance.new("BillboardGui")
+                bb.Name="KnHubESPP"
+                bb.MaxDistance=maxDist
+                bb.Size=UDim2.new(0,120,0,32)
+                bb.Adornee=hrp bb.AlwaysOnTop=true bb.Parent=Workspace.CurrentCamera
+                local nameL=Instance.new("TextLabel",bb)
+                nameL.Size=UDim2.new(1,0,0,16) nameL.BackgroundTransparency=1 nameL.Font=Enum.Font.GothamSemibold
+                nameL.Text=plr.Name.." ["..plr.DisplayName.."]" nameL.TextColor3=isEnemy(plr)and Color3.fromRGB(255,60,80)or getTheme().accent nameL.TextScaled=true nameL.TextStrokeTransparency=0.2
+                local hpBar=Instance.new("Frame",bb)
+                hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8) hpBar.Position=UDim2.new(0,0,1,-8) hpBar.BackgroundColor3=Color3.fromRGB(40,220,90) hpBar.BorderSizePixel=0
+                billboards[plr]=bb
+            else
+                local bb=billboards[plr]
+                local nameL=bb:FindFirstChildOfClass("TextLabel") if nameL then nameL.Text=plr.Name.." ["..plr.DisplayName.."]" nameL.TextColor3=isEnemy(plr)and Color3.fromRGB(255,60,80)or getTheme().accent end
+                local hpBar=bb:FindFirstChildOfClass("Frame") if hpBar and hum then hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8) end
+            end
+        end
+    else for plr,guiB in pairs(billboards)do if typeof(plr)=="Instance"and plr:IsA("Player")then safeDestroy(guiB)billboards[plr]=nil end end end
+    -- Bots
+    if State.botESP then
+        for _,bot in ipairs(getBots())do
+            if not billboards[bot] then
+                local bb=Instance.new("BillboardGui")
+                bb.Name="KnHubESPB"
+                bb.MaxDistance=maxDist
+                bb.Size=UDim2.new(0,120,0,32)
+                bb.Adornee=bot:FindFirstChild("HumanoidRootPart")bb.AlwaysOnTop=true bb.Parent=Workspace.CurrentCamera
+                local nameL=Instance.new("TextLabel",bb)
+                nameL.Size=UDim2.new(1,0,0,16) nameL.BackgroundTransparency=1 nameL.Font=Enum.Font.Code nameL.TextStrokeTransparency=0.3
+                nameL.Text=bot.Name nameL.TextColor3=getTheme().accent nameL.TextScaled=true
+                local hpBar=Instance.new("Frame",bb)
+                local hum=bot:FindFirstChildOfClass("Humanoid")
+                hpBar.Size=UDim2.new(hum and hum.Health/math.max(hum.MaxHealth,1)or 1,0,0,8) hpBar.Position=UDim2.new(0,0,1,-8) hpBar.BackgroundColor3=Color3.fromRGB(90,110,200) hpBar.BorderSizePixel=0
+                billboards[bot]=bb
+            else
+                local bb=billboards[bot]
+                local nameL,hum=bb:FindFirstChildOfClass("TextLabel"),bot:FindFirstChildOfClass("Humanoid")
+                if nameL then nameL.Text=bot.Name end
+                local hpBar=bb:FindFirstChildOfClass("Frame")
+                if hpBar and hum then hpBar.Size=UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8) end
+            end
+        end
+    else for bot,guiB in pairs(billboards)do if typeof(bot)=="Instance"and bot:IsA("Model")and not bot:FindFirstChildOfClass("Player")then safeDestroy(guiB)billboards[bot]=nil end end end
+
+    -- Skeleton ESP (Players + Bots)
+    if not DrawingAvail or not State.skeletonESP then cleanupSkeleton() return end
+    local cam=Workspace.CurrentCamera
+    for _,item in ipairs({getPlayers(),getBots()})do
+        for _,obj in ipairs(item)do
+            local char=obj.Character or obj
+            if not(char and char:FindFirstChild("Head")) then continue end
+            if not skeletonLines[obj] then
+                skeletonLines[obj]={}
+                for i=1,#skeletonPairs do
+                    local ln=Drawing.new("Line")
+                    ln.Thickness=2 ln.Transparency=1 ln.Color=isEnemy(obj)and Color3.fromRGB(255,40,60)or getTheme().accent ln.Visible=false
+                    table.insert(skeletonLines[obj],ln)
+                end
+            end
+            local lines=skeletonLines[obj]
+            for i,pair in ipairs(skeletonPairs)do
+                local a,b=pair[1],pair[2]
+                local p1=char:FindFirstChild(a) local p2=char:FindFirstChild(b)
+                local ln=lines[i]
+                if p1 and p2 and ln then
+                    local v1,v1on=cam:WorldToViewportPoint(p1.Position) local v2,v2on=cam:WorldToViewportPoint(p2.Position)
+                    ln.From=Vector2.new(v1.X,v1.Y) ln.To=Vector2.new(v2.X,v2.Y)
+                    ln.Visible=v1on and v2on and State.skeletonESP ln.Color=isEnemy(obj)and Color3.fromRGB(255,40,60)or getTheme().accent
+                else if ln then ln.Visible=false end end
+            end
+        end
+    end
+end
+
+---------------------------------------------------------------------- 
+-- 09 | AIMBOT FUNCTIONALIDADE Player/Bot Generalizada
+---------------------------------------------------------------------- 
+local function getClosestPlayer()
+    local cam=Workspace.CurrentCamera
+    local fov,state=State.aimbotPlayer.fov,State.aimbotPlayer
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local closest,closestDist=nil,fov
+    for _,plr in ipairs(getPlayers())do
+        if plr==Player then continue end
+        if state.enemiesOnly and Player.Team and plr.Team and plr.Team==Player.Team then continue end
+        local char=plr.Character
+        local hrp=char and char:FindFirstChild("HumanoidRootPart")
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health<=0 then continue end
+        local vec,onScr=cam:WorldToViewportPoint(hrp.Position)
+        if not onScr or not isVisible(cam.CFrame.Position,hrp.Position)then continue end
+        local dist=(Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist<closestDist then closest,closestDist=plr,dist end
+    end
+    return closest
+end
+
+local function getClosestBot()
+    local cam=Workspace.CurrentCamera
+    local fov,state=State.aimbotBot.fov,State.aimbotBot
+    local center=Vector2.new(cam.ViewportSize.X/2,cam.ViewportSize.Y/2)
+    local closest,closestDist=nil,fov
+    for _,bot in ipairs(getBots())do
+        local hrp=bot:FindFirstChild("HumanoidRootPart")
+        local hum=bot:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health<=0 then continue end
+        local vec,onScr=cam:WorldToViewportPoint(hrp.Position)
+        if not onScr or not isVisible(cam.CFrame.Position,hrp.Position)then continue end
+        local dist=(Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist<closestDist then closest,closestDist=bot,dist end
+    end
+    return closest
+end
+
+local function handleAimbotPlayer()
+    if not State.aimbotPlayer.enabled then return end
+    local cam=Workspace.CurrentCamera
+    local target = getClosestPlayer()
+    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp=target.Character.HumanoidRootPart
+        pcall(function()
+            local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+            cam.CFrame = cam.CFrame:Lerp(destCFrame,clamp(State.aimbotPlayer.pull/100,0.10,1))
+        end)
+    end
+end
+local function handleAimbotBot()
+    if not State.aimbotBot.enabled then return end
+    local cam=Workspace.CurrentCamera
+    local target=getClosestBot()
+    if target and target:FindFirstChild("HumanoidRootPart") then
+        local hrp=target.HumanoidRootPart
+        pcall(function()
+            local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+            cam.CFrame = cam.CFrame:Lerp(destCFrame,clamp(State.aimbotBot.pull/100,0.10,1))
+        end)
+    end
+end
+
+---------------------------------------------------------------------- 
+-- 10 | Main Loop — Atualização Renderizada, Cleanups
+----------------------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    if not gui.Enabled or not State.mainEnabled then cleanupESP() cleanupSkeleton() return end
+    pcall(updateESP)
+    pcall(handleAimbotPlayer)
+    pcall(handleAimbotBot)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    safeDestroy(billboards[plr]) billboards[plr]=nil
+    if skeletonLines[plr]then for _,ln in ipairs(skeletonLines[plr])do safeRemove(ln)end skeletonLines[plr]=nil end
+end)
+Players.PlayerAdded:Connect(function(plr)
+    safeDestroy(billboards[plr]) billboards[plr]=nil
+    if skeletonLines[plr]then for _,ln in ipairs(skeletonLines[plr])do safeRemove(ln)end skeletonLines[plr]=nil end
+end)
+
+---------------------------------------------------------------------- 
+-- 11 | Documentação/Expansão/Customização
+----------------------------------------------------------------------
+-- Você pode expandir: ESP de objetos/drops, auto-tap, teleportar pra jogador ou bot, salvar/load configs DataStore, etc.
+-- Modularidade: Adicione slots de presets, integrações, binds, animações, overlay extras.
+-- Modifique themes, acrescente color picker ou menu pop-up.
+-- O HUB já suporta expansão fácil, facilitando upgrades, profissionalização e futuros cheats!
+-- ™KnHubCG UltraVeterano — 2025 — SeuNome | Bons hacks e boa organização!
