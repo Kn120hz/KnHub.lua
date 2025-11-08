@@ -1,0 +1,703 @@
+--[[
+    KnHub CG | ESP + Aimbot com verificação de paredes + autocomplete funciona fora de foco/clicável
+    - Aimbot só mira/trava jogadores sem parede (linha de visão), usando Raycast
+    - ESP por nome: autocomplete sempre visível até clicar em sugestão; ao clicar, campo é preenchido e ESP para o jogador ativado
+    - Interface organizada, campos não sobrepostos
+    - ESP todos/inimigos separado do ESP por nome; Skeleton segue modo ativado
+    - Otimizado para Delta Roblox Executor
+]]
+
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local function clamp(n, lo, hi) return math.max(lo, math.min(hi, n)) end
+local function IsEnemy(plr) return LocalPlayer.Team ~= plr.Team end
+local function safeFindHumanoidRootPart(ch) return ch and ch:FindFirstChild("HumanoidRootPart") end
+
+-- Raycast checagem de parede/obstáculo
+local function isVisible(from, to)
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Workspace.CurrentCamera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+    local result = Workspace:Raycast(from, (to - from).unit * (to - from).Magnitude, params)
+    if not result then
+        return true -- nada no caminho
+    end
+    -- Ignora partes sem Collision ou CanQuery
+    if not result.Instance.CanCollide or not result.Instance.CanQuery then
+        return true
+    end
+    return false
+end
+
+-- Interface HUB
+local hubButton = Instance.new("TextButton")
+hubButton.Size = UDim2.new(0, 100, 0, 32)
+hubButton.Position = UDim2.new(0, 20, 0, 20)
+hubButton.Text = "Abrir Hub"
+hubButton.BackgroundColor3 = Color3.fromRGB(32,120,220)
+hubButton.TextColor3 = Color3.new(1,1,1)
+hubButton.TextScaled = true
+hubButton.Font = Enum.Font.GothamSemibold
+hubButton.Visible = false
+hubButton.Parent = CoreGui
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "KnHubCG"
+gui.Parent = CoreGui
+gui.ResetOnSpawn = false
+gui.Enabled = true
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 380, 0, 590)
+mainFrame.Position = UDim2.new(0, 150, 0, 60)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = gui
+
+local tLabel = Instance.new("TextLabel")
+tLabel.Size = UDim2.new(1, 0, 0, 42)
+tLabel.Position = UDim2.new(0, 0, 0, 0)
+tLabel.BackgroundColor3 = Color3.fromRGB(36, 36, 46)
+tLabel.TextColor3 = Color3.new(1, 1, 1)
+tLabel.Text = "KnHub CG"
+tLabel.Font = Enum.Font.GothamSemibold
+tLabel.TextScaled = true
+tLabel.Parent = mainFrame
+
+-- Botão fechar/minimizar
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0,32,0,32)
+closeBtn.Position = UDim2.new(1,-38,0,5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(210,40,40)
+closeBtn.Text = "X"
+closeBtn.TextScaled = true
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = tLabel
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0,32,0,32)
+minimizeBtn.Position = UDim2.new(1,-76,0,5)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(200,200,60)
+minimizeBtn.Text = "_"
+minimizeBtn.TextScaled = true
+minimizeBtn.TextColor3 = Color3.new(1,1,1)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = tLabel
+local function minimizeHub() gui.Enabled = false; hubButton.Visible = true end
+local function restoreHub() gui.Enabled = true; hubButton.Visible = false end
+minimizeBtn.MouseButton1Click:Connect(minimizeHub)
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy(); hubButton:Destroy() end)
+hubButton.MouseButton1Click:Connect(restoreHub)
+
+-- Drag fallback
+do local dragging, dragStart, startPos
+tLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and dragStart and startPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+end
+
+-- Criação de seções
+local function createSection(y, h, name)
+    local sec = Instance.new("Frame")
+    sec.Size = UDim2.new(1,-10,0,h)
+    sec.Position = UDim2.new(0,5,0,y)
+    sec.BackgroundColor3 = Color3.fromRGB(32,36,48)
+    sec.BorderSizePixel = 0
+    sec.Parent = mainFrame
+    local secT = Instance.new("TextLabel")
+    secT.Size = UDim2.new(1,0,0,28)
+    secT.Position = UDim2.new(0,0,0,0)
+    secT.BackgroundColor3 = Color3.fromRGB(40,40,53)
+    secT.TextColor3 = Color3.new(1,1,1)
+    secT.Font = Enum.Font.GothamBold
+    secT.TextScaled = true
+    secT.Text = name
+    secT.Parent = sec
+    return sec
+end
+
+local aimSection     = createSection(44, 120, "Aimbot")
+local espSection     = createSection(172, 180, "ESP")
+local povSection     = createSection(362, 70, "FOV/POV")
+local ctrlSection    = createSection(432, 58, "Controles")
+
+
+-- AIMBOT
+local function makeToggle(parent, txt, def, xoff, yoff)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,88,0,28)
+    btn.Position = UDim2.new(0,xoff or 10,0,yoff or 38)
+    btn.BackgroundColor3 = def and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+    btn.Text = txt..": "..(def and "ON" or "OFF")
+    btn.Font = Enum.Font.GothamBold
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Parent = parent
+    local state = def
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = txt..": "..(state and "ON" or "OFF")
+        btn.BackgroundColor3 = state and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+    end)
+    return function() return state end, btn
+end
+
+local aimbotOn = makeToggle(aimSection, "Aimbot", false, 10, 38)
+
+local aimModeBtn = Instance.new("TextButton")
+aimModeBtn.Size = UDim2.new(0,110,0,28)
+aimModeBtn.Position = UDim2.new(0,108,0,38)
+aimModeBtn.BackgroundColor3 = Color3.fromRGB(43,60,80)
+aimModeBtn.Text = "Target: Inimigos"
+aimModeBtn.Font = Enum.Font.Code
+aimModeBtn.TextColor3 = Color3.new(1,1,1)
+aimModeBtn.TextScaled = true
+aimModeBtn.Parent = aimSection
+
+local aimEnemiesOnly = true
+aimModeBtn.MouseButton1Click:Connect(function()
+    aimEnemiesOnly = not aimEnemiesOnly
+    aimModeBtn.Text = "Target: "..(aimEnemiesOnly and "Inimigos" or "Todos")
+end)
+
+local aimLockBtn = Instance.new("TextButton")
+aimLockBtn.Size = UDim2.new(0,83,0,28)
+aimLockBtn.Position = UDim2.new(0,230,0,38)
+aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+aimLockBtn.Text = "Travar Mira"
+aimLockBtn.TextScaled = true
+aimLockBtn.TextColor3 = Color3.new(1,1,1)
+aimLockBtn.Font = Enum.Font.GothamBold
+aimLockBtn.Parent = aimSection
+local aimUnlockBtn = Instance.new("TextButton")
+aimUnlockBtn.Size = UDim2.new(0,83,0,28)
+aimUnlockBtn.Position = UDim2.new(0,230,0,74)
+aimUnlockBtn.BackgroundColor3 = Color3.fromRGB(180,50,43)
+aimUnlockBtn.Text = "Destravar"
+aimUnlockBtn.TextScaled = true
+aimUnlockBtn.TextColor3 = Color3.new(1,1,1)
+aimUnlockBtn.Font = Enum.Font.GothamBold
+aimUnlockBtn.Parent = aimSection
+aimUnlockBtn.Visible = false
+local aimLockedPlayer = nil
+
+aimLockBtn.MouseButton1Click:Connect(function()
+    local cam = workspace.CurrentCamera
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local closest, closestDist = nil, 1e9
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        if aimEnemiesOnly and not IsEnemy(plr) then continue end
+        local char = plr.Character
+        if not char then continue end
+        local hrp = safeFindHumanoidRootPart(char)
+        if not hrp then continue end
+        local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
+        if not onScreen then continue end
+        if not isVisible(cam.CFrame.Position, hrp.Position) then continue end -- verificação de parede!!
+        local dist = (Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist < closestDist then closest, closestDist = plr, dist end
+    end
+    if closest then
+        aimLockedPlayer = closest
+        aimLockBtn.BackgroundColor3 = Color3.fromRGB(40,200,100)
+        aimLockBtn.Text = "Mirando: "..closest.Name
+        aimUnlockBtn.Visible = true
+    end
+end)
+aimUnlockBtn.MouseButton1Click:Connect(function()
+    aimLockedPlayer = nil
+    aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+    aimLockBtn.Text = "Travar Mira"
+    aimUnlockBtn.Visible = false
+end)
+
+local pullBox = Instance.new("TextBox")
+pullBox.Size = UDim2.new(0,80,0,28)
+pullBox.Position = UDim2.new(0,10,0,74)
+pullBox.Text = "Pull: 50"
+pullBox.BackgroundColor3 = Color3.fromRGB(32,50,60)
+pullBox.Font = Enum.Font.Code
+pullBox.TextColor3 = Color3.new(1,1,1)
+pullBox.Parent = aimSection
+local pull = 50
+pullBox.FocusLost:Connect(function()
+    local n = tonumber(pullBox.Text:match("%d+")) or 50
+    pull = clamp(n, 0, 100)
+    pullBox.Text = "Pull: "..pull
+end)
+local fovBox = Instance.new("TextBox")
+fovBox.Size = UDim2.new(0,80,0,28)
+fovBox.Position = UDim2.new(0,102,0,74)
+fovBox.Text = "FOV: 100"
+fovBox.BackgroundColor3 = Color3.fromRGB(30,58,82)
+fovBox.Font = Enum.Font.Code
+fovBox.TextColor3 = Color3.new(1,1,1)
+fovBox.Parent = aimSection
+local aimFOV = 100
+fovBox.FocusLost:Connect(function()
+    local n = tonumber(fovBox.Text:match("%d+")) or 100
+    aimFOV = clamp(n,20,400)
+    fovBox.Text = "FOV: "..aimFOV
+end)
+
+-- ESP SEÇÃO --------------------
+local espTotalBtn = Instance.new("TextButton")
+espTotalBtn.Size = UDim2.new(0,120,0,28)
+espTotalBtn.Position = UDim2.new(0,10,0,38)
+espTotalBtn.BackgroundColor3 = Color3.fromRGB(73,120,190)
+espTotalBtn.Text = "Mostrar: Inimigos"
+espTotalBtn.Font = Enum.Font.GothamBold
+espTotalBtn.TextColor3 = Color3.new(1,1,1)
+espTotalBtn.TextScaled = true
+espTotalBtn.Parent = espSection
+
+local espModeEnemiesOnly = true
+espTotalBtn.MouseButton1Click:Connect(function()
+    espModeEnemiesOnly = not espModeEnemiesOnly
+    espTotalBtn.Text = "Mostrar: "..(espModeEnemiesOnly and "Inimigos" or "Todos")
+end)
+
+local espTotalToggle = Instance.new("TextButton")
+espTotalToggle.Size = UDim2.new(0,88,0,28)
+espTotalToggle.Position = UDim2.new(0,145,0,38)
+espTotalToggle.BackgroundColor3 = Color3.fromRGB(73,180,90)
+espTotalToggle.Text = "ESP: OFF"
+espTotalToggle.TextScaled = true
+espTotalToggle.TextColor3 = Color3.new(1,1,1)
+espTotalToggle.Font = Enum.Font.GothamBold
+espTotalToggle.Parent = espSection
+local espTotalActive = false
+espTotalToggle.MouseButton1Click:Connect(function()
+    espTotalActive = not espTotalActive
+    espTotalToggle.Text = "ESP: "..(espTotalActive and "ON" or "OFF")
+    espTotalToggle.BackgroundColor3 = espTotalActive and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+end)
+
+local skeletonToggleBtn = Instance.new("TextButton")
+skeletonToggleBtn.Size = UDim2.new(0,88,0,28)
+skeletonToggleBtn.Position = UDim2.new(0,240,0,38)
+skeletonToggleBtn.BackgroundColor3 = Color3.fromRGB(200,210,70)
+skeletonToggleBtn.Text = "Skeleton: OFF"
+skeletonToggleBtn.TextScaled = true
+skeletonToggleBtn.TextColor3 = Color3.new(1,1,1)
+skeletonToggleBtn.Font = Enum.Font.GothamBold
+skeletonToggleBtn.Parent = espSection
+local skeletonActive = false
+skeletonToggleBtn.MouseButton1Click:Connect(function()
+    skeletonActive = not skeletonActive
+    skeletonToggleBtn.Text = "Skeleton: "..(skeletonActive and "ON" or "OFF")
+    skeletonToggleBtn.BackgroundColor3 = skeletonActive and Color3.fromRGB(245,220,90) or Color3.fromRGB(200,210,70)
+end)
+
+-- ESP por jogador (toggle+box+autocomplete)
+local espPlayerBtn = Instance.new("TextButton")
+espPlayerBtn.Size = UDim2.new(0,120,0,28)
+espPlayerBtn.Position = UDim2.new(0,10,0,83)
+espPlayerBtn.BackgroundColor3 = Color3.fromRGB(42,180,120)
+espPlayerBtn.Font = Enum.Font.GothamBold
+espPlayerBtn.TextColor3 = Color3.new(1,1,1)
+espPlayerBtn.Text = "Ativar ESP jogador"
+espPlayerBtn.TextScaled = true
+espPlayerBtn.Parent = espSection
+
+local espPlayerActive = false
+espPlayerBtn.MouseButton1Click:Connect(function()
+    espPlayerActive = not espPlayerActive
+    espPlayerBtn.Text = espPlayerActive and "Desativar ESP jogador" or "Ativar ESP jogador"
+    espPlayerBtn.BackgroundColor3 = espPlayerActive and Color3.fromRGB(90,220,120) or Color3.fromRGB(42,180,120)
+    updateSuggestions(espPlayerBox.Text)
+end)
+
+local espPlayerBox = Instance.new("TextBox")
+espPlayerBox.Size = UDim2.new(0,120,0,28)
+espPlayerBox.Position = UDim2.new(0,145,0,83)
+espPlayerBox.Text = ""
+espPlayerBox.BackgroundColor3 = Color3.fromRGB(42,60,100)
+espPlayerBox.Font = Enum.Font.GothamBold
+espPlayerBox.TextColor3 = Color3.new(1,1,1)
+espPlayerBox.PlaceholderText = "Nome do jogador..."
+espPlayerBox.Parent = espSection
+
+local suggestFrame = Instance.new("Frame")
+suggestFrame.Visible = false
+suggestFrame.BackgroundTransparency = 0.6
+suggestFrame.Position = UDim2.new(0,145,0,113)
+suggestFrame.Size = UDim2.new(0,120,0,78)
+suggestFrame.BackgroundColor3 = Color3.fromRGB(32,42,80)
+suggestFrame.Parent = espSection
+local suggestList = {}
+for i=1,6 do
+    local lbl = Instance.new("TextButton")
+    lbl.Size = UDim2.new(1,0,0,13)
+    lbl.Position = UDim2.new(0,0,0,(i-1)*13)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.Code
+    lbl.TextColor3 = Color3.new(0.9,0.9,1)
+    lbl.TextScaled = true
+    lbl.Parent = suggestFrame
+    lbl.Visible = false
+    table.insert(suggestList, lbl)
+end
+
+local espSelectedName = nil
+local suggestions = {}
+
+local function updateSuggestions(txt)
+    suggestions = {}
+    local query = txt:lower()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Name:lower():find(query,1,true) then
+            table.insert(suggestions, plr.Name)
+        end
+    end
+    for i,lbl in ipairs(suggestList) do
+        if suggestions[i] then
+            lbl.Text = suggestions[i]
+            lbl.Visible = true
+        else
+            lbl.Visible = false
+        end
+    end
+    suggestFrame.Visible = espPlayerActive and txt ~= "" and #suggestions > 0
+end
+
+espPlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updateSuggestions(espPlayerBox.Text)
+end)
+espPlayerBox.Focused:Connect(function()
+    updateSuggestions(espPlayerBox.Text)
+end)
+
+-- **Novo: sugestões não somem ao perder foco, somente ao clicar/escolher**
+espPlayerBox.FocusLost:Connect(function()
+    updateSuggestions(espPlayerBox.Text)
+end)
+for _,lbl in ipairs(suggestList) do
+    lbl.MouseButton1Click:Connect(function()
+        espSelectedName = lbl.Text
+        espPlayerBox.Text = lbl.Text
+        suggestFrame.Visible = false
+        updateSuggestions(espPlayerBox.Text)
+    end)
+end
+-- Se clicar em qualquer sugestão, o nome é inserido e o ESP ativa para esse nome!
+
+espPlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
+    if espPlayerBox.Text ~= "" then
+        suggestFrame.Visible = espPlayerActive and #suggestions > 0
+    else
+        suggestFrame.Visible = false
+        espSelectedName = nil
+    end
+end)
+
+local function playerInESP(plr)
+    if espPlayerActive and espSelectedName then
+        return plr.Name == espSelectedName
+    elseif espTotalActive then
+        if espModeEnemiesOnly then
+            return IsEnemy(plr)
+        else
+            return plr ~= LocalPlayer
+        end
+    end
+    return false
+end
+
+-- SKELETON segue modo ativado
+local function skeletonShouldShow() return skeletonActive and (espTotalActive or (espPlayerActive and espSelectedName)) end
+
+-- POV/POV -- espaçamento
+local function povToggle()
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,100,0,28)
+    btn.Position = UDim2.new(0,10,0,36)
+    btn.BackgroundColor3 = Color3.fromRGB(73,180,90)
+    btn.Text = "FOV Circle: ON"
+    btn.TextScaled = true
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = povSection
+    local state = true
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = "FOV Circle: "..(state and "ON" or "OFF")
+        btn.BackgroundColor3 = state and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+    end)
+    return function() return state end
+end
+local povOn = povToggle()
+local povRadiusBox = Instance.new("TextBox")
+povRadiusBox.Size = UDim2.new(0,100,0,28)
+povRadiusBox.Position = UDim2.new(0,120,0,36)
+povRadiusBox.Text = "Radius: 100"
+povRadiusBox.BackgroundColor3 = Color3.fromRGB(32,50,60)
+povRadiusBox.Font = Enum.Font.Code
+povRadiusBox.TextColor3 = Color3.new(1,1,1)
+povRadiusBox.Parent = povSection
+local povRadius = 100
+povRadiusBox.FocusLost:Connect(function()
+    local n = tonumber(povRadiusBox.Text:match("%d+")) or 100
+    povRadius = clamp(n,40,400)
+    povRadiusBox.Text = "Radius: "..povRadius
+end)
+
+local inst = Instance.new("TextLabel")
+inst.Size = UDim2.new(1,-12,1,0)
+inst.Position = UDim2.new(0,6,0,0)
+inst.BackgroundTransparency = 1
+inst.TextColor3 = Color3.new(0.9,0.9,1)
+inst.Font = Enum.Font.Code
+inst.TextXAlignment = Enum.TextXAlignment.Left
+inst.Text = "Aimbot ignora paredes! ESP por nome é clicável sempre que digitar, lista visível até clicar na sugestão."
+inst.TextScaled = true
+inst.Parent = ctrlSection
+
+----------------------------------------------------------------------------------
+-- ESP BILLBOARD + Skeleton
+local billboards, skeletonLines = {}, {}
+local function cleanupESP()
+    for plr,guiB in pairs(billboards) do if guiB and guiB.Parent then guiB:Destroy() end end
+    table.clear(billboards)
+end
+local function cleanupSkeleton()
+    for plr,lines in pairs(skeletonLines) do
+        if lines then for _,ln in ipairs(lines) do ln.Visible = false; ln:Remove() end end
+    end
+    table.clear(skeletonLines)
+end
+local function updateESPs()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if not playerInESP(plr) then if billboards[plr] then billboards[plr]:Destroy(); billboards[plr]=nil end continue end
+        local char = plr.Character
+        if not char then continue end
+        local hrp = safeFindHumanoidRootPart(char)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then continue end
+
+        local bb = billboards[plr]
+        if not bb then
+            bb = Instance.new("BillboardGui")
+            bb.Name = "KnHubESP"
+            bb.MaxDistance = 350
+            bb.Size = UDim2.new(0,118,0,34)
+            bb.Adornee = hrp
+            bb.AlwaysOnTop = true
+            bb.Parent = hrp
+            local nameL = Instance.new("TextLabel")
+            nameL.Name = "Name"
+            nameL.Size = UDim2.new(1,0,0,18)
+            nameL.BackgroundTransparency = 1
+            nameL.Font = Enum.Font.GothamSemibold
+            nameL.TextSize = 13
+            nameL.TextColor3 = IsEnemy(plr) and Color3.fromRGB(255,44,54) or Color3.fromRGB(60,160,255)
+            nameL.TextStrokeTransparency = 0.18
+            nameL.Text = plr.Name
+            nameL.Parent = bb
+            local bar = Instance.new("Frame")
+            bar.Name = "HPBar"
+            bar.Size = UDim2.new(hum.Health/hum.MaxHealth,0,0,8)
+            bar.Position = UDim2.new(0,0,1,-8)
+            bar.BackgroundColor3 = Color3.fromRGB(30,220,90)
+            bar.BorderSizePixel = 0
+            bar.Parent = bb
+            billboards[plr] = bb
+        end
+        pcall(function()
+            local nameL = bb:FindFirstChild("Name")
+            if nameL then
+                nameL.Text = plr.Name
+                nameL.TextColor3 = IsEnemy(plr) and Color3.fromRGB(255,44,54) or Color3.fromRGB(60,160,255)
+            end
+            local bar = bb:FindFirstChild("HPBar")
+            if bar then
+                bar.Size = UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                bar.BackgroundColor3 = Color3.fromRGB(30,220,90)
+            end
+        end)
+    end
+end
+
+local DrawingAvail, Drawing = pcall(function() return Drawing end)
+local skeletonPairs = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}
+}
+local function updateSkeletonESP()
+    if not DrawingAvail or not skeletonShouldShow() then cleanupSkeleton(); return end
+    local cam = workspace.CurrentCamera
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if not playerInESP(plr) then cleanupSkeleton() continue end
+        local char = plr.Character
+        if not char or not char:FindFirstChild("Head") then continue end
+        local lines = skeletonLines[plr]
+        if not lines then
+            lines = {}
+            for i=1,#skeletonPairs do
+                local ln = Drawing.new("Line")
+                ln.Thickness = 2
+                ln.Transparency = 1
+                ln.Color = IsEnemy(plr) and Color3.fromRGB(255,40,60) or Color3.fromRGB(60,160,255)
+                ln.Visible = false
+                table.insert(lines,ln)
+            end
+            skeletonLines[plr] = lines
+        end
+        for i,pair in ipairs(skeletonPairs) do
+            local a, b = pair[1], pair[2]
+            local p1 = char:FindFirstChild(a)
+            local p2 = char:FindFirstChild(b)
+            local ln = lines[i]
+            if p1 and p2 and ln then
+                local v1,v1on = cam:WorldToViewportPoint(p1.Position)
+                local v2,v2on = cam:WorldToViewportPoint(p2.Position)
+                ln.From = Vector2.new(v1.X,v1.Y)
+                ln.To = Vector2.new(v2.X,v2.Y)
+                ln.Visible = v1on and v2on and skeletonShouldShow()
+                ln.Color = IsEnemy(plr) and Color3.fromRGB(255,40,60) or Color3.fromRGB(60,160,255)
+            else
+                if ln then ln.Visible = false end
+            end
+        end
+    end
+end
+
+Players.PlayerRemoving:Connect(function(plr)
+    if billboards[plr] then billboards[plr]:Destroy() billboards[plr]=nil end
+    if skeletonLines[plr] then for _,ln in ipairs(skeletonLines[plr]) do ln.Visible = false; ln:Remove() end skeletonLines[plr]=nil end
+    if plr == aimLockedPlayer then
+        aimLockedPlayer = nil
+        aimUnlockBtn.Visible = false
+        aimLockBtn.Text = "Travar Mira"
+        aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+    end
+end)
+
+----------------------------------------------------------------------------------
+-- AIMBOT (linha de visão/camera trava de verdade)
+local function getClosestTarget(fovRad, fovCenter, enemiesOnly)
+    local cam = workspace.CurrentCamera
+    local closest, closestDist = nil, fovRad
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        if enemiesOnly and not IsEnemy(plr) then continue end
+        local char = plr.Character
+        if not char then continue end
+        local hrp = safeFindHumanoidRootPart(char)
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health<=0 then continue end
+        local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
+        if not onScreen then continue end
+        if not isVisible(cam.CFrame.Position, hrp.Position) then continue end -- CHECAGEM DE PAREDE!
+        local dist = (Vector2.new(vec.X,vec.Y)-fovCenter).Magnitude
+        if dist < closestDist then closest, closestDist = plr, dist end
+    end
+    return closest
+end
+local function handleAimbot()
+    if not aimbotOn() then return end
+    local cam = workspace.CurrentCamera
+    local fov = aimFOV
+    local pullAmt = pull
+    local enemiesOnly = aimEnemiesOnly
+    local ctr = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local target = nil
+    if aimLockedPlayer and aimLockedPlayer.Parent and aimLockedPlayer.Character then
+        local hrp = safeFindHumanoidRootPart(aimLockedPlayer.Character)
+        local hum = aimLockedPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hrp and hum and hum.Health > 0 and isVisible(cam.CFrame.Position, hrp.Position) then
+            target = aimLockedPlayer
+        else
+            aimLockedPlayer = nil
+            aimUnlockBtn.Visible = false
+            aimLockBtn.Text = "Travar Mira"
+            aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+        end
+    end
+    if not target then
+        target = getClosestTarget(fov, ctr, enemiesOnly)
+    end
+    if target and target.Character then
+        local hrp = safeFindHumanoidRootPart(target.Character)
+        pcall(function()
+            if hrp then
+                local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+                cam.CFrame = cam.CFrame:Lerp(destCFrame, clamp(pullAmt/100,0.10, 1))
+            end
+        end)
+    end
+end
+
+----------------------------------------------------------------------------------
+-- POV centralizado
+local povVisual = nil
+local function updatePOVCircle()
+    if povVisual then povVisual:Destroy() povVisual=nil end
+    if not povOn() then return end
+    local cam = workspace.CurrentCamera
+    local rad = povRadius
+    local ctrX = math.floor(cam.ViewportSize.X/2)
+    local ctrY = math.floor(cam.ViewportSize.Y/2)
+    local circ = Instance.new("Frame")
+    circ.Size = UDim2.new(0,rad*2,0,rad*2)
+    circ.Position = UDim2.new(0,ctrX-rad,0,ctrY-rad)
+    circ.BackgroundTransparency = 1
+    circ.BorderSizePixel = 0
+    circ.Parent = gui
+    local img = Instance.new("ImageLabel")
+    img.Size = UDim2.new(1,0,1,0)
+    img.BackgroundTransparency = 1
+    img.Image = "rbxassetid://3570695787"
+    img.ImageColor3 = Color3.fromRGB(90,120,220)
+    img.ImageTransparency = 0.45
+    img.Parent = circ
+    povVisual = circ
+end
+
+---------------------------------------------------------------------------------
+-- MAIN LOOP
+local lastPOVUpdate = 0
+RunService.RenderStepped:Connect(function()
+    if gui.Enabled then
+        if espTotalActive or (espPlayerActive and espSelectedName) then pcall(updateESPs) else cleanupESP() end
+        if skeletonShouldShow() then pcall(updateSkeletonESP) else cleanupSkeleton() end
+        if aimbotOn() then pcall(handleAimbot) end
+        if povOn() then
+            if tick()-lastPOVUpdate > 0.03 then
+                pcall(updatePOVCircle)
+                lastPOVUpdate = tick()
+            end
+        elseif povVisual and povVisual.Parent then povVisual:Destroy(); povVisual=nil end
+    else
+        cleanupESP()
+        cleanupSkeleton()
+        if povVisual and povVisual.Parent then povVisual:Destroy(); povVisual=nil end
+    end
+end)
+
+--[[
+    KnHubCG! Aimbot só trava/mira em alvos com linha de visão, ESP por nome é clicável e sugerido, interface robusta.
+]]
