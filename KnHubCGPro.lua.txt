@@ -1,0 +1,654 @@
+--[[
+    KnHubCG | Delta Executor Roblox
+    - Estrutura profissional: Interface por abas (TabGui)
+    - Aimbot com Raycast, totalmente configurável (FOV, Pull, alvo amigo/inimigo)
+    - ESP persistente, não some ao morrer/reaparecer, só é limpo ao sair do jogo
+    - Autocomplete avançado, mostrando nome + displayname, visual limpo
+    - Skeleton otimizados (Drawing API), com controle global
+    - Throttle nos updates para evitar lag, manutenção segura para Drawing e Billboards
+    - Botão global de Desabilitar/Resetar tudo
+    - Abas: Aimbot, ESP, Drawing, Config, Sobre
+    - Interface 100% CoreGui, não sobrepõe UIs, destruição garantida
+]]
+
+------------------ DEPENDÊNCIAS -------------------
+local Services = setmetatable({}, {__index = function(self, k)
+    local s = game:GetService(k)
+    rawset(self, k, s)
+    return s
+end})
+local Players, LocalPlayer, RunService, UserInputService, Workspace, CoreGui =
+    Services.Players, Services.Players.LocalPlayer, Services.RunService, Services.UserInputService, Services.Workspace, Services.CoreGui
+
+local function clamp(n, lo, hi) return math.max(lo, math.min(hi, n)) end
+local function IsEnemy(plr) return LocalPlayer.Team and plr.Team and LocalPlayer.Team ~= plr.Team end -- adaptável
+local function safeHRP(ch) return ch and ch:FindFirstChild("HumanoidRootPart") end
+local function safeHumanoid(ch) return ch and ch:FindFirstChildOfClass("Humanoid") end
+
+--------------------------------------- SAFE CLEANUP
+local function safeDestroy(inst) pcall(function() if inst and inst.Parent then inst:Destroy() end end) end
+local function safeRemove(inst) pcall(function() if inst then inst:Remove() end end) end
+
+--------------------------------------- PRINCIPAL HUB GUI
+local HUB_NAME = "KnHubCG_Pro"
+local existing = CoreGui:FindFirstChild(HUB_NAME) if existing then existing:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = HUB_NAME
+gui.Parent = CoreGui
+gui.Enabled = true
+gui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 420, 0, 600)
+mainFrame.Position = UDim2.new(0, 130, 0, 50)
+mainFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = gui
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 46)
+title.BackgroundColor3 = Color3.fromRGB(37, 40, 53)
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Text = "KnHubCG Professional"
+title.Font = Enum.Font.GothamSemibold
+title.TextScaled = true
+title.Position = UDim2.new(0, 0, 0, 0)
+
+-- Drag manual
+do
+    local dragging, dragStart, startPos
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+        end
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- Botão fechar/reset
+local closeBtn = Instance.new("TextButton", title)
+closeBtn.Size = UDim2.new(0,34,0,34)
+closeBtn.Position = UDim2.new(1,-40,0,6)
+closeBtn.BackgroundColor3 = Color3.fromRGB(210,40,40)
+closeBtn.Text = "✕"
+closeBtn.TextScaled = true
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.Font = Enum.Font.GothamBold
+
+closeBtn.MouseButton1Click:Connect(function()
+    gui.Enabled = false
+    gui:Destroy()
+end)
+
+local resetBtn = Instance.new("TextButton", title)
+resetBtn.Size = UDim2.new(0,34,0,34)
+resetBtn.Position = UDim2.new(1,-80,0,6)
+resetBtn.BackgroundColor3 = Color3.fromRGB(50,180,220)
+resetBtn.Text = "⟲"
+resetBtn.TextScaled = true
+resetBtn.TextColor3 = Color3.new(1,1,1)
+resetBtn.Font = Enum.Font.GothamBold
+
+---------------------------------- ABAS/TABS ORGANIZADAS
+local Tabs = {
+    {name = "AIMBOT"}, {name = "ESP"}, {name = "DRAW"}, {name = "CONFIG"}, {name = "SOBRE"}
+}
+local tabBar = Instance.new("Frame", mainFrame)
+tabBar.Size = UDim2.new(1,-12,0,32)
+tabBar.Position = UDim2.new(0,6,0,48)
+tabBar.BackgroundTransparency = 1
+
+local tabButtons = {}
+local selectedTab = 1
+local sections = {}
+for i,tab in ipairs(Tabs) do
+    local btn = Instance.new("TextButton", tabBar)
+    btn.Size = UDim2.new(0,80,1,0)
+    btn.Position = UDim2.new(0,(i-1)*82,0,0)
+    btn.BackgroundColor3 = i == selectedTab and Color3.fromRGB(60,120,220) or Color3.fromRGB(32,32,48)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextScaled = true
+    btn.Text = tab.name
+    tabButtons[i] = btn
+    btn.MouseButton1Click:Connect(function()
+        selectedTab = i
+        for j,sec in pairs(sections) do sec.Visible = (j==selectedTab) end
+        for j,btn2 in pairs(tabButtons) do btn2.BackgroundColor3 = j==selectedTab and Color3.fromRGB(60,120,220) or Color3.fromRGB(32,32,48) end
+    end)
+end
+
+for i=1, #Tabs do
+    local sec = Instance.new("Frame", mainFrame)
+    sec.Size = UDim2.new(1, -16, 1, -100)
+    sec.Position = UDim2.new(0, 8, 0, 90)
+    sec.BackgroundTransparency = 1
+    sec.Visible = (i == selectedTab)
+    sections[i] = sec
+end
+
+------------------------- ESTADO GLOBAL E CALLBACKS
+local State = {
+    enabled = true, -- controle global
+    aimbot = {on=false, enemies=true, lockedPlayer=nil, pull=50, fov=100},
+    esp = {totalActive=false, playerActive=false, modeEnemies=true, skeleton=false, selectedName=nil},
+    drawSkeleton = false,
+    pov = {on=true, radius=100},
+    espPlayerList = {},
+    debounce = {esp=0, skeleton=0},
+}
+
+resetBtn.MouseButton1Click:Connect(function()
+    State = {
+        enabled = true,
+        aimbot = {on=false, enemies=true, lockedPlayer=nil, pull=50, fov=100},
+        esp = {totalActive=false, playerActive=false, modeEnemies=true, skeleton=false, selectedName=nil},
+        drawSkeleton = false,
+        pov = {on=true, radius=100},
+        espPlayerList = {},
+        debounce = {esp=0, skeleton=0},
+    }
+    cleanupAll()
+end)
+
+function cleanupAll()
+    cleanupESP()
+    cleanupSkeleton()
+    cleanupPOV()
+    for _,v in pairs(gui:GetDescendants()) do
+        if v:IsA("BillboardGui") or v:IsA("Drawing") or v:IsA("Frame") then safeDestroy(v) end
+    end
+end
+
+---------------------------------------------------------------- AIMBOT (aba 1)
+local aimSec = sections[1]
+local aimToggle = Instance.new("TextButton", aimSec)
+aimToggle.Size = UDim2.new(0,120,0,32)
+aimToggle.Position = UDim2.new(0,10,0,20)
+aimToggle.BackgroundColor3 = Color3.fromRGB(62,180,90)
+aimToggle.Text = "Aimbot: OFF"
+aimToggle.TextScaled = true
+aimToggle.Font = Enum.Font.GothamBold
+aimToggle.TextColor3 = Color3.new(1,1,1)
+aimToggle.MouseButton1Click:Connect(function()
+    State.aimbot.on = not State.aimbot.on
+    aimToggle.Text = "Aimbot: "..(State.aimbot.on and "ON" or "OFF")
+    aimToggle.BackgroundColor3 = State.aimbot.on and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+end)
+
+local aimEnemiesBtn = Instance.new("TextButton", aimSec)
+aimEnemiesBtn.Size = UDim2.new(0,100,0,32)
+aimEnemiesBtn.Position = UDim2.new(0,140,0,20)
+aimEnemiesBtn.BackgroundColor3 = Color3.fromRGB(92,120,190)
+aimEnemiesBtn.Text = "Alvo: Inimigos"
+aimEnemiesBtn.TextScaled = true
+aimEnemiesBtn.Font = Enum.Font.GothamSemibold
+aimEnemiesBtn.TextColor3 = Color3.new(1,1,1)
+aimEnemiesBtn.MouseButton1Click:Connect(function()
+    State.aimbot.enemies = not State.aimbot.enemies
+    aimEnemiesBtn.Text = "Alvo: "..(State.aimbot.enemies and "Inimigos" or "Todos")
+    aimEnemiesBtn.BackgroundColor3 = State.aimbot.enemies and Color3.fromRGB(92,120,190) or Color3.fromRGB(53,56,70)
+end)
+
+local aimPullBox = Instance.new("TextBox", aimSec)
+aimPullBox.Size = UDim2.new(0,100,0,32)
+aimPullBox.Position = UDim2.new(0,260,0,20)
+aimPullBox.Text = "Pull: 50"
+aimPullBox.Font = Enum.Font.Code
+aimPullBox.TextColor3 = Color3.new(1,1,1)
+aimPullBox.BackgroundColor3 = Color3.fromRGB(32,50,60)
+aimPullBox.FocusLost:Connect(function()
+    local n = tonumber(aimPullBox.Text:match("%d+")) or 50
+    State.aimbot.pull = clamp(n, 10, 100)
+    aimPullBox.Text = "Pull: "..State.aimbot.pull
+end)
+
+local aimFOVBox = Instance.new("TextBox", aimSec)
+aimFOVBox.Size = UDim2.new(0,100,0,32)
+aimFOVBox.Position = UDim2.new(0,10,0,60)
+aimFOVBox.Text = "FOV: 100"
+aimFOVBox.Font = Enum.Font.Code
+aimFOVBox.TextColor3 = Color3.new(1,1,1)
+aimFOVBox.BackgroundColor3 = Color3.fromRGB(30,58,82)
+aimFOVBox.FocusLost:Connect(function()
+    local n = tonumber(aimFOVBox.Text:match("%d+")) or 100
+    State.aimbot.fov = clamp(n,40,400)
+    aimFOVBox.Text = "FOV: "..State.aimbot.fov
+end)
+
+local aimLockBtn = Instance.new("TextButton", aimSec)
+aimLockBtn.Size = UDim2.new(0,110,0,32)
+aimLockBtn.Position = UDim2.new(0,120,0,60)
+aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+aimLockBtn.Text = "Travar Mira"
+aimLockBtn.TextScaled = true
+aimLockBtn.TextColor3 = Color3.new(1,1,1)
+aimLockBtn.Font = Enum.Font.GothamBold
+aimLockBtn.MouseButton1Click:Connect(function()
+    local cam = Workspace.CurrentCamera
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local closest, closestDist = nil, 1e9
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        if State.aimbot.enemies and not IsEnemy(plr) then continue end
+        local char, hrp = plr.Character, safeHRP(plr.Character)
+        local hum = safeHumanoid(plr.Character)
+        if not char or not hrp or not hum or hum.Health <= 0 then continue end
+        local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
+        if not onScreen or not isVisible(cam.CFrame.Position, hrp.Position) then continue end
+        local dist = (Vector2.new(vec.X,vec.Y)-center).Magnitude
+        if dist < closestDist then closest, closestDist = plr, dist end
+    end
+    if closest then
+        State.aimbot.lockedPlayer = closest
+        aimLockBtn.BackgroundColor3 = Color3.fromRGB(40,200,100)
+        aimLockBtn.Text = "Mirando: "..closest.Name
+    end
+end)
+local aimUnlockBtn = Instance.new("TextButton", aimSec)
+aimUnlockBtn.Size = UDim2.new(0,110,0,32)
+aimUnlockBtn.Position = UDim2.new(0,240,0,60)
+aimUnlockBtn.BackgroundColor3 = Color3.fromRGB(180,50,43)
+aimUnlockBtn.Text = "Destravar"
+aimUnlockBtn.TextScaled = true
+aimUnlockBtn.TextColor3 = Color3.new(1,1,1)
+aimUnlockBtn.Font = Enum.Font.GothamBold
+aimUnlockBtn.MouseButton1Click:Connect(function()
+    State.aimbot.lockedPlayer = nil
+    aimLockBtn.Text = "Travar Mira"
+    aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+end)
+
+--------------------------------------------------------- ESP/PLAYER (aba 2)
+local espSec = sections[2]
+local espTotalBtn = Instance.new("TextButton", espSec)
+espTotalBtn.Size = UDim2.new(0,120,0,32)
+espTotalBtn.Position = UDim2.new(0,10,0,20)
+espTotalBtn.BackgroundColor3 = Color3.fromRGB(73,120,190)
+espTotalBtn.Text = "ESP: OFF"
+espTotalBtn.TextScaled = true
+espTotalBtn.Font = Enum.Font.GothamBold
+espTotalBtn.TextColor3 = Color3.new(1,1,1)
+espTotalBtn.MouseButton1Click:Connect(function()
+    State.esp.totalActive = not State.esp.totalActive
+    espTotalBtn.Text = "ESP: "..(State.esp.totalActive and "ON" or "OFF")
+    espTotalBtn.BackgroundColor3 = State.esp.totalActive and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+end)
+
+local espModeBtn = Instance.new("TextButton", espSec)
+espModeBtn.Size = UDim2.new(0,100,0,32)
+espModeBtn.Position = UDim2.new(0,140,0,20)
+espModeBtn.BackgroundColor3 = Color3.fromRGB(92,120,190)
+espModeBtn.Text = "Mostrar: Inimigos"
+espModeBtn.TextScaled = true
+espModeBtn.Font = Enum.Font.GothamSemibold
+espModeBtn.TextColor3 = Color3.new(1,1,1)
+espModeBtn.MouseButton1Click:Connect(function()
+    State.esp.modeEnemies = not State.esp.modeEnemies
+    espModeBtn.Text = "Mostrar: "..(State.esp.modeEnemies and "Inimigos" or "Todos")
+    espModeBtn.BackgroundColor3 = State.esp.modeEnemies and Color3.fromRGB(92,120,190) or Color3.fromRGB(53,56,70)
+end)
+
+local skeletonBtn = Instance.new("TextButton", espSec)
+skeletonBtn.Size = UDim2.new(0,100,0,32)
+skeletonBtn.Position = UDim2.new(0,260,0,20)
+skeletonBtn.BackgroundColor3 = Color3.fromRGB(200,210,70)
+skeletonBtn.Text = "Skeleton: OFF"
+skeletonBtn.TextScaled = true
+skeletonBtn.Font = Enum.Font.GothamBold
+skeletonBtn.TextColor3 = Color3.new(1,1,1)
+skeletonBtn.MouseButton1Click:Connect(function()
+    State.esp.skeleton = not State.esp.skeleton
+    skeletonBtn.Text = "Skeleton: "..(State.esp.skeleton and "ON" or "OFF")
+    skeletonBtn.BackgroundColor3 = State.esp.skeleton and Color3.fromRGB(245,220,90) or Color3.fromRGB(200,210,70)
+end)
+
+---- ESP por jogador + autocomplete
+local espPlayerBtn = Instance.new("TextButton", espSec)
+espPlayerBtn.Size = UDim2.new(0,120,0,32)
+espPlayerBtn.Position = UDim2.new(0,10,0,60)
+espPlayerBtn.BackgroundColor3 = Color3.fromRGB(42,180,120)
+espPlayerBtn.Font = Enum.Font.GothamBold
+espPlayerBtn.TextColor3 = Color3.new(1,1,1)
+espPlayerBtn.Text = "ESP Jogador: OFF"
+espPlayerBtn.TextScaled = true
+
+espPlayerBtn.MouseButton1Click:Connect(function()
+    State.esp.playerActive = not State.esp.playerActive
+    espPlayerBtn.Text = "ESP Jogador: " .. (State.esp.playerActive and "ON" or "OFF")
+    espPlayerBtn.BackgroundColor3 = State.esp.playerActive and Color3.fromRGB(90,220,120) or Color3.fromRGB(42,180,120)
+end)
+
+local espPlayerBox = Instance.new("TextBox", espSec)
+espPlayerBox.Size = UDim2.new(0,180,0,32)
+espPlayerBox.Position = UDim2.new(0,140,0,60)
+espPlayerBox.Text = ""
+espPlayerBox.BackgroundColor3 = Color3.fromRGB(42,60,100)
+espPlayerBox.Font = Enum.Font.GothamBold
+espPlayerBox.TextColor3 = Color3.new(1,1,1)
+espPlayerBox.PlaceholderText = "Digite para buscar..."
+
+-- Sugestão avançada (até 10)
+local suggestFrame = Instance.new("Frame", espSec)
+suggestFrame.Size = UDim2.new(0,180,0,160)
+suggestFrame.Position = UDim2.new(0,140,0,100)
+suggestFrame.BackgroundTransparency = 0.4
+suggestFrame.BackgroundColor3 = Color3.fromRGB(32,42,80)
+suggestFrame.Visible = false
+local suggestList = {}
+for i=1,10 do
+    local lbl = Instance.new("TextButton", suggestFrame)
+    lbl.Size = UDim2.new(1,0,0,16)
+    lbl.Position = UDim2.new(0,0,0,(i-1)*16)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextColor3 = Color3.new(0.94,0.96,1)
+    lbl.TextScaled = true
+    lbl.Visible = false
+    suggestList[i] = lbl
+end
+
+function updateSuggestions(txt)
+    local query = txt:lower()
+    local currSuggestions = {}
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and (plr.Name:lower():find(query,1,true) or plr.DisplayName:lower():find(query,1,true)) then
+            table.insert(currSuggestions, plr.Name.." ["..plr.DisplayName.."]")
+        end
+    end
+    for i=1,#suggestList do
+        local suggestion = currSuggestions[i]
+        suggestList[i].Text, suggestList[i].Visible = suggestion or "", suggestion ~= nil
+    end
+    suggestFrame.Visible = State.esp.playerActive and txt ~= "" and #currSuggestions > 0
+end
+
+espPlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updateSuggestions(espPlayerBox.Text)
+end)
+
+for i,lbl in ipairs(suggestList) do
+    lbl.MouseButton1Click:Connect(function()
+        State.esp.selectedName = lbl.Text:match("^[^%[]+")
+        espPlayerBox.Text = lbl.Text
+        suggestFrame.Visible = false
+        updateSuggestions(espPlayerBox.Text)
+    end)
+end
+
+--------------------------------------------------- DRAW (aba 3) + POV
+local drawSec = sections[3]
+local povToggle = Instance.new("TextButton", drawSec)
+povToggle.Size = UDim2.new(0,120,0,32)
+povToggle.Position = UDim2.new(0,10,0,16)
+povToggle.BackgroundColor3 = Color3.fromRGB(73,180,90)
+povToggle.Text = "FOV Circle: ON"
+povToggle.TextScaled = true
+povToggle.TextColor3 = Color3.new(1,1,1)
+povToggle.Font = Enum.Font.GothamBold
+povToggle.MouseButton1Click:Connect(function()
+    State.pov.on = not State.pov.on
+    povToggle.Text = "FOV Circle: "..(State.pov.on and "ON" or "OFF")
+    povToggle.BackgroundColor3 = State.pov.on and Color3.fromRGB(73,180,90) or Color3.fromRGB(53,56,70)
+end)
+
+local povRadiusBox = Instance.new("TextBox", drawSec)
+povRadiusBox.Size = UDim2.new(0,120,0,32)
+povRadiusBox.Position = UDim2.new(0,140,0,16)
+povRadiusBox.Text = "Raio: 100"
+povRadiusBox.BackgroundColor3 = Color3.fromRGB(32,50,60)
+povRadiusBox.Font = Enum.Font.Code
+povRadiusBox.TextColor3 = Color3.new(1,1,1)
+povRadiusBox.FocusLost:Connect(function()
+    local n = tonumber(povRadiusBox.Text:match("%d+")) or 100
+    State.pov.radius = clamp(n,40,400)
+    povRadiusBox.Text = "Raio: "..State.pov.radius
+end)
+
+--------------------------------------------------- CONFIG/INFO (aba 4/5)
+local confSec = sections[4]
+local infoSec = sections[5]
+local infoText = Instance.new("TextLabel", infoSec)
+infoText.Size = UDim2.new(1,-10,1,-10)
+infoText.Position = UDim2.new(0,5,0,5)
+infoText.BackgroundTransparency = 1
+infoText.TextColor3 = Color3.fromRGB(190,200,230)
+infoText.Font = Enum.Font.Code
+infoText.Text = "\nKnHubCG Professional\n\nAimbot, ESP e Skeleton totalmente configuráveis!\nRemember: Use Delta Executor para garantir funcionamento.\nDesenvolvido para máxima estabilidade, lag mínimo e segurança."
+
+------------------------------------- CORE FUNCTIONALITY: ESP, SKELETON, AIMBOT, POV
+local billboards, skeletonLines = {}, {}
+
+local function isVisible(from, to)
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Workspace.CurrentCamera}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+    local result = Workspace:Raycast(from, (to - from).Unit * (to - from).Magnitude, params)
+    if not result then return true end
+    if not result.Instance or not result.Instance.CanCollide or not result.Instance.CanQuery then return true end
+    return false
+end
+
+function playerInESP(plr)
+    if State.esp.playerActive and State.esp.selectedName and plr.Name == State.esp.selectedName then return true end
+    if State.esp.totalActive then return (State.esp.modeEnemies and IsEnemy(plr)) or (not State.esp.modeEnemies and plr~=LocalPlayer) end
+    return false
+end
+
+function cleanupESP()
+    for plr,guiB in pairs(billboards) do safeDestroy(guiB) billboards[plr]=nil end
+end
+
+function cleanupSkeleton()
+    for plr,lines in pairs(skeletonLines) do
+        if lines then for _,ln in ipairs(lines) do safeRemove(ln) end end
+        skeletonLines[plr]=nil
+    end
+end
+
+function cleanupPOV()
+    if povVisual and povVisual.Parent then povVisual:Destroy(); povVisual = nil end
+end
+
+local DrawingAvail, Drawing
+do DrawingAvail, Drawing = pcall(function() return Drawing end) end
+local skeletonPairs = {
+    {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"}
+}
+
+function updateESPs()
+    if os.clock()-State.debounce.esp < 0.1 then return end
+    State.debounce.esp = os.clock()
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if playerInESP(plr) then
+            local char, hrp, hum = plr.Character, safeHRP(plr.Character), safeHumanoid(plr.Character)
+            if not char or not hrp or not hum then continue end
+            if not billboards[plr] then
+                local bb = Instance.new("BillboardGui")
+                bb.Name = "KnHubESP"
+                bb.MaxDistance = 350
+                bb.Size = UDim2.new(0,120,0,34)
+                bb.Adornee = hrp
+                bb.AlwaysOnTop = true
+                bb.Parent = hrp
+                local nameL = Instance.new("TextLabel", bb)
+                nameL.Name = "Name"
+                nameL.Size = UDim2.new(1,0,0,18)
+                nameL.BackgroundTransparency = 1
+                nameL.Font = Enum.Font.GothamSemibold
+                nameL.TextSize = 13
+                nameL.TextStrokeTransparency = 0.18
+                nameL.Text = plr.Name .. " [" .. plr.DisplayName .. "]"
+                nameL.TextColor3 = IsEnemy(plr) and Color3.fromRGB(255,44,54) or Color3.fromRGB(60,160,255)
+                local bar = Instance.new("Frame", bb)
+                bar.Name = "HPBar"
+                bar.Size = UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                bar.Position = UDim2.new(0,0,1,-8)
+                bar.BackgroundColor3 = Color3.fromRGB(30,220,90)
+                bar.BorderSizePixel = 0
+                billboards[plr] = bb
+            else
+                local bb = billboards[plr]
+                local nameL = bb:FindFirstChild("Name")
+                if nameL then
+                    nameL.Text = plr.Name .. " ["..plr.DisplayName.."]"
+                    nameL.TextColor3 = IsEnemy(plr) and Color3.fromRGB(255,44,54) or Color3.fromRGB(60,160,255)
+                end
+                local bar = bb:FindFirstChild("HPBar")
+                if bar and hum then
+                    bar.Size = UDim2.new(hum.Health/math.max(hum.MaxHealth,1),0,0,8)
+                end
+            end
+        else
+            if billboards[plr] then safeDestroy(billboards[plr]) billboards[plr]=nil end
+        end
+    end
+end
+
+function updateSkeletonESP()
+    if os.clock()-State.debounce.skeleton < 0.12 then return end
+    State.debounce.skeleton = os.clock()
+    if not DrawingAvail or not State.esp.skeleton then cleanupSkeleton() return end
+    local cam = Workspace.CurrentCamera
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if playerInESP(plr) then
+            local char = plr.Character
+            if not char then continue end
+            if not skeletonLines[plr] then
+                skeletonLines[plr] = {}
+                for i=1,#skeletonPairs do
+                    local ln = Drawing.new("Line")
+                    ln.Thickness = 2
+                    ln.Transparency = 1
+                    ln.Color = IsEnemy(plr) and Color3.fromRGB(255,40,60) or Color3.fromRGB(60,160,255)
+                    ln.Visible = false
+                    table.insert(skeletonLines[plr],ln)
+                end
+            end
+            local lines = skeletonLines[plr]
+            for i,pair in ipairs(skeletonPairs) do
+                local a, b = pair[1], pair[2]
+                local p1, p2 = char:FindFirstChild(a), char:FindFirstChild(b)
+                local ln = lines[i]
+                if p1 and p2 and ln then
+                    local v1,v1on = cam:WorldToViewportPoint(p1.Position)
+                    local v2,v2on = cam:WorldToViewportPoint(p2.Position)
+                    ln.From = Vector2.new(v1.X,v1.Y)
+                    ln.To = Vector2.new(v2.X,v2.Y)
+                    ln.Visible = v1on and v2on and State.esp.skeleton
+                    ln.Color = IsEnemy(plr) and Color3.fromRGB(255,40,60) or Color3.fromRGB(60,160,255)
+                else if ln then ln.Visible = false end
+                end
+            end
+        else
+            if skeletonLines[plr] then for _,ln in ipairs(skeletonLines[plr]) do safeRemove(ln) end skeletonLines[plr]=nil end
+        end
+    end
+end
+
+local povVisual = nil
+function updatePOVCircle()
+    if povVisual and povVisual.Parent then povVisual:Destroy(); povVisual=nil end
+    if not State.pov.on then return end
+    local cam = Workspace.CurrentCamera
+    local rad = State.pov.radius
+    local ctrX, ctrY = math.floor(cam.ViewportSize.X/2), math.floor(cam.ViewportSize.Y/2)
+    local circ = Instance.new("Frame")
+    circ.Size = UDim2.new(0,rad*2,0,rad*2)
+    circ.Position = UDim2.new(0,ctrX-rad,0,ctrY-rad)
+    circ.BackgroundTransparency = 1
+    circ.BorderSizePixel = 0
+    circ.Parent = gui
+    local img = Instance.new("ImageLabel")
+    img.Size = UDim2.new(1,0,1,0)
+    img.BackgroundTransparency = 1
+    img.Image = "rbxassetid://3570695787"
+    img.ImageColor3 = Color3.fromRGB(90,120,220)
+    img.ImageTransparency = 0.45
+    img.Parent = circ
+    povVisual = circ
+end
+
+function getClosestTarget()
+    local cam = Workspace.CurrentCamera
+    local fovRad = State.aimbot.fov
+    local fovCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local closest, closestDist = nil, fovRad
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        if State.aimbot.enemies and not IsEnemy(plr) then continue end
+        local char, hrp, hum = plr.Character, safeHRP(plr.Character), safeHumanoid(plr.Character)
+        if not char or not hrp or not hum or hum.Health<=0 then continue end
+        local vec, onScreen = cam:WorldToViewportPoint(hrp.Position)
+        if not onScreen or not isVisible(cam.CFrame.Position, hrp.Position) then continue end
+        local dist = (Vector2.new(vec.X,vec.Y)-fovCenter).Magnitude
+        if dist < closestDist then closest, closestDist = plr, dist end
+    end
+    return closest
+end
+
+function handleAimbot()
+    if not State.aimbot.on then return end
+    local cam = Workspace.CurrentCamera
+    local target = nil
+    if State.aimbot.lockedPlayer and State.aimbot.lockedPlayer.Parent and State.aimbot.lockedPlayer.Character then
+        local hrp = safeHRP(State.aimbot.lockedPlayer.Character)
+        local hum = safeHumanoid(State.aimbot.lockedPlayer.Character)
+        if hrp and hum and hum.Health > 0 and isVisible(cam.CFrame.Position, hrp.Position) then
+            target = State.aimbot.lockedPlayer
+        else
+            State.aimbot.lockedPlayer = nil
+            aimLockBtn.Text = "Travar Mira"
+            aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+        end
+    end
+    if not target then
+        target = getClosestTarget()
+    end
+    if target and target.Character then
+        local hrp = safeHRP(target.Character)
+        pcall(function()
+            if hrp then
+                local destCFrame = CFrame.new(cam.CFrame.Position, hrp.Position)
+                cam.CFrame = cam.CFrame:Lerp(destCFrame, clamp(State.aimbot.pull/100,0.10, 1))
+            end
+        end)
+    end
+end
+
+Players.PlayerRemoving:Connect(function(plr)
+    safeDestroy(billboards[plr])
+    billboards[plr] = nil
+    if skeletonLines[plr] then for _,ln in ipairs(skeletonLines[plr]) do safeRemove(ln) end skeletonLines[plr]=nil end
+    if plr == State.aimbot.lockedPlayer then
+        State.aimbot.lockedPlayer = nil
+        aimLockBtn.Text = "Travar Mira"
+        aimLockBtn.BackgroundColor3 = Color3.fromRGB(33,110,220)
+    end
+end)
+
+--------------------------------------------------------- MAIN LOOP
+RunService.RenderStepped:Connect(function()
+    if not gui.Enabled or not State.enabled then cleanupAll() return end
+    if State.esp.totalActive or (State.esp.playerActive and State.esp.selectedName) then pcall(updateESPs) else cleanupESP() end
+    if State.esp.skeleton then pcall(updateSkeletonESP) else cleanupSkeleton() end
+    if State.aimbot.on then pcall(handleAimbot) end
+    if State.pov.on then pcall(updatePOVCircle) else cleanupPOV() end
+end)
