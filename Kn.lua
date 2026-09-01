@@ -6503,7 +6503,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             end
             do
                 local pos = (corners.bottomLeft + corners.bottomRight) * 0.5
-                dist.Text = mathround(humanoid_distance / 3) .. " meters"
+                dist.Text = mathround(humanoid_distance / 3) .. "m"
                 dist.Position = pos
                 local _cl = os.clock()
                 if not plr._gun_cache_time or (_cl - plr._gun_cache_time) > 0.5 then
@@ -7189,17 +7189,18 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                             if (Camera.CFrame.p-part.Position).Magnitude < 2500 then
                                 local position, onscreen = Camera:WorldToViewportPoint(part.Position)
                                 local distance = (Vector2.new(position.X,position.Y)-mousepos).Magnitude
+                                local world_distance = (Camera.CFrame.Position-part.Position).Magnitude
                                 if is_inside_fov(position, onscreen) and distance <= maximum_distance then
                                     if silent_aim.visible_only then
                                         if is_visible_fn(Camera.CFrame, npcs, part) then
-                                            ermm_part = part; maximum_distance = distance; isnpc = true
+                                            ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
                                         end
                                     elseif require_triggerable then
                                         if is_triggerable(npcs, part) then
-                                            ermm_part = part; maximum_distance = distance; isnpc = true
+                                            ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
                                         end
                                     else
-                                        ermm_part = part; maximum_distance = distance; isnpc = true
+                                        ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
                                     end
                                 end
                             end
@@ -7209,7 +7210,6 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
             end
         end
         local best_world_distance = math.huge
-        local best_screen_distance = math.huge
         for _, plr in Players:GetPlayers() do
             local character = plr.Character
             if plr~=LocalPlayer and character and not silent_aim_is_whitelisted(plr) then
@@ -7232,12 +7232,7 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                         if can_use then
                             -- With Visible Only enabled, choose the closest visible target in the FOV.
                             -- With it disabled, choose the nearest target in 3D distance.
-                            if silent_aim.visible_only or require_triggerable then
-                                if screen_distance <= best_screen_distance then
-                                    best_screen_distance = screen_distance
-                                    ermm_part=part; isnpc=false
-                                end
-                            elseif world_distance < best_world_distance then
+                            if world_distance < best_world_distance then
                                 best_world_distance = world_distance
                                 ermm_part=part; isnpc=false
                             end
@@ -7719,9 +7714,16 @@ do
                 if silent_aim.enabled and silent_aim.target_part then
                     local hitpart = silent_aim.target_part
                     if hitpart and hitpart.Parent then
-                        if silent_aim.corner_shoot and silent_aim.manipulated_origin then origin=silent_aim.manipulated_origin; args[1]=origin end
-                        local direction=hitpart.Position-origin; args[2]=direction
-                        return { Instance=hitpart, Position=hitpart.Position, Normal=direction.Unit*-1, Material=hitpart.Material, Distance=direction.Magnitude }
+                        -- Do not redirect short/interactive raycasts. Interaction rays
+                        -- (objects, prompts, NPCs, etc.) keep their original target.
+                        local original_direction = args[2]
+                        local is_combat_ray = typeof(original_direction) == "Vector3"
+                            and original_direction.Magnitude >= 100
+                        if is_combat_ray then
+                            if silent_aim.corner_shoot and silent_aim.manipulated_origin then origin=silent_aim.manipulated_origin; args[1]=origin end
+                            local direction=hitpart.Position-origin; args[2]=direction
+                            return { Instance=hitpart, Position=hitpart.Position, Normal=direction.Unit*-1, Material=hitpart.Material, Distance=direction.Magnitude }
+                        end
                     end
                 end
             end
