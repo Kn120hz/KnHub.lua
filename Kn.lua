@@ -728,8 +728,8 @@ local CustomFont = { } do
         return table.concat(out)
     end
 
-    local smallest_pixel_b64 =
-        AAEAAAAMAIAAAwBAT1MvMmSz/H0AAAFIAAAAYFZETVhoYG/3AAAGmAAABeBjbWFwel+AIwAADHgAAAUwZ2FzcP//AAEAAGP4AAAACGdseWa90hIhAAARqAAA
+    local smallest_pixel_b64 = [[
+AAEAAAAMAIAAAwBAT1MvMmSz/H0AAAFIAAAAYFZETVhoYG/3AAAGmAAABeBjbWFwel+AIwAADHgAAAUwZ2FzcP//AAEAAGP4AAAACGdseWa90hIhAAARqAAA
         RRRoZWFk/hqSzwAAAMwAAAA2aGhlYQegBbsAAAEEAAAAJGhtdHhmdgAAAAABqAAABPBsb2Nh73HeDAAAVrwAAAJ6bWF4cAFBADMAAAEoAAAAIG5hbWX/R4pV
         AABZOAAABC1wb3N0fPqooAAAXWgAAAaOAAEAAAABAAArGZw2Xw889QAJA+gAAAAAzSamLgAAAADNJqljAAD/OASwAyAAAAAJAAIAAAAAAAAAAQAAAu7/BgAA
         BRQAAABkBLAAAQAAAAAAAAAAAAAAAAAAATwAAQAAATwAMgAEAAAAAAABAAAAAAAAAAAAAAAAAAAAAAADAfMBkAAFAAACvAKKAAD/nAK8AooAAAD6ADIA+gAA
@@ -1014,6 +1014,7 @@ local CustomFont = { } do
         NzkJYWZpaTEwMDgwCWFmaWkxMDA4MQlhZmlpMTAwODIJYWZpaTEwMDgzCWFmaWkxMDA4NAlhZmlpMTAwODUJYWZpaTEwMDg2CWFmaWkxMDA4NwlhZmlpMTAw
         ODgJYWZpaTEwMDg5CWFmaWkxMDA5MAlhZmlpMTAwOTEJYWZpaTEwMDkyCWFmaWkxMDA5MwlhZmlpMTAwOTQJYWZpaTEwMDk1CWFmaWkxMDA5NglhZmlpMTAw
         OTcNYWZpaTEwMDQ1LjAwMQ1hZmlpMTAwNDcuMDAxAAAAAAAB//8AAA==
+]]
 
     pcall(function()
         local ttfPath = Library.Folders.Assets .. "/SmallestPixel.ttf"
@@ -8383,7 +8384,7 @@ task.wait(0.2)
 Library.Holder.Instance.Enabled = false
 local logoAsset = isfile("tomboy.hook/Assets/logo.png") and getcustomasset("tomboy.hook/Assets/logo.png") or nil
 local Window     = Library:Window({ Name = "Kn v1.0.0 PREMIUM", Logo = logoAsset or "" })
-local Watermark  = Window:Watermark("Kn v8 PREMIUM")
+local Watermark  = Window:Watermark("Kn v1.0.0 PREMIUM")
 local KeybindList= Window:KeybindList()
 
 local CombatPage  = Window:Page({ Name = "Combat"  })
