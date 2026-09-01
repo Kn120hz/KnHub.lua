@@ -3976,6 +3976,13 @@ do
                 Scale = 1
             })
 
+            -- Independent animation scale so mobile scaling remains intact.
+            Items["OpenScale"] = Instances:Create("UIScale", {
+                Parent = Items["MainFrame"].Instance,
+                Name = "OpenAnimationScale",
+                Scale = 0.94
+            })
+
             local function UpdateMobileScale()
                 local viewport = Camera and Camera.ViewportSize or Vector2New(720, 1600)
                 local shortest = math.min(viewport.X, viewport.Y)
@@ -4167,14 +4174,20 @@ do
 
             Window.IsOpen = Bool
 
-            if Items["ExternalToggle"] and Items["ExternalToggle"].Instance then
-                Items["ExternalToggle"].Instance.Text = Window.IsOpen and "×" or "≡"
+            if Items["ExternalToggleIcon"] and Items["ExternalToggleIcon"].Instance then
+                local icon = Items["ExternalToggleIcon"].Instance
+                icon.Text = Window.IsOpen and "×" or "≡"
+                TweenService:Create(icon, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Rotation = Window.IsOpen and 90 or 0}):Play()
             end
 
             Debounce = true 
 
             if Window.IsOpen then 
                 Items["MainFrame"].Instance.Visible = true 
+                Items["OpenScale"].Instance.Scale = 0.94
+                TweenService:Create(Items["OpenScale"].Instance, TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Scale = 1}):Play()
+            else
+                TweenService:Create(Items["OpenScale"].Instance, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Scale = 0.94}):Play()
             end
 
             local Descendants = Items["MainFrame"].Instance:GetDescendants()
@@ -4210,13 +4223,10 @@ do
             Name = "MobileMenuToggle",
             AnchorPoint = Vector2New(1, 1),
             Position = UDim2New(1, -18, 1, -72),
-            Size = UDim2New(0, 52, 0, 52),
+            Size = UDim2New(0, 56, 0, 56),
             BackgroundColor3 = FromRGB(20, 20, 20),
             BorderSizePixel = 0,
-            Text = "≡",
-            TextSize = 25,
-            FontFace = Library.Font,
-            TextColor3 = FromRGB(255, 255, 255),
+            Text = "",
             AutoButtonColor = false,
             ZIndex = 10000
         })
@@ -4224,6 +4234,40 @@ do
             BackgroundColor3 = "Element",
             TextColor3 = "Text"
         })
+
+        Items["ExternalToggleScale"] = Instances:Create("UIScale", {
+            Parent = Items["ExternalToggle"].Instance,
+            Name = "PressScale",
+            Scale = 1
+        })
+
+        Items["ExternalToggleGlow"] = Instances:Create("ImageLabel", {
+            Parent = Items["ExternalToggle"].Instance,
+            Name = "Glow",
+            AnchorPoint = Vector2New(0.5, 0.5),
+            Position = UDim2New(0.5, 0, 0.5, 0),
+            Size = UDim2New(1, 18, 1, 18),
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://18245826428",
+            ImageTransparency = 0.65,
+            ZIndex = 9999,
+            SliceCenter = RectNew(Vector2New(21,21), Vector2New(79,79))
+        })
+        Items["ExternalToggleGlow"]:AddToTheme({ImageColor3 = "Accent"})
+
+        Items["ExternalToggleIcon"] = Instances:Create("TextLabel", {
+            Parent = Items["ExternalToggle"].Instance,
+            Name = "Icon",
+            BackgroundTransparency = 1,
+            Size = UDim2New(1, 0, 1, 0),
+            Position = UDim2New(0, 0, 0, 0),
+            Text = "≡",
+            TextSize = 27,
+            FontFace = Library.Font,
+            TextColor3 = FromRGB(255,255,255),
+            ZIndex = 10001
+        })
+        Items["ExternalToggleIcon"]:AddToTheme({TextColor3 = "Text"})
 
         Instances:Create("UICorner", {
             Parent = Items["ExternalToggle"].Instance,
@@ -4304,18 +4348,20 @@ do
             end)
         end
 
-        -- Mouse/touch hover/press feedback without changing the button's function.
+        -- Improved mobile button feedback: soft scale, glow and rotation.
         Items["ExternalToggle"]:Connect("InputBegan", function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1
                 or Input.UserInputType == Enum.UserInputType.Touch then
-                Items["ExternalToggle"]:Tween(nil, {BackgroundTransparency = 0.12})
+                TweenService:Create(Items["ExternalToggleScale"].Instance, TweenInfo.new(0.10, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 0.90}):Play()
+                TweenService:Create(Items["ExternalToggleGlow"].Instance, TweenInfo.new(0.10, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageTransparency = 0.35}):Play()
             end
         end)
 
         Items["ExternalToggle"]:Connect("InputEnded", function(Input)
             if Input.UserInputType == Enum.UserInputType.MouseButton1
                 or Input.UserInputType == Enum.UserInputType.Touch then
-                Items["ExternalToggle"]:Tween(nil, {BackgroundTransparency = 0})
+                TweenService:Create(Items["ExternalToggleScale"].Instance, TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+                TweenService:Create(Items["ExternalToggleGlow"].Instance, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageTransparency = 0.65}):Play()
             end
         end)
 
@@ -4942,6 +4988,11 @@ do
 
         function Button:SetVisibility(Bool)
             Items["Button"].Instance.Visible = Bool
+        end
+
+        function Button:SetText(Text)
+            Button.Name = tostring(Text or "")
+            Items["Button"].Instance.Text = Button.Name
         end
 
         function Button:Press()
@@ -6003,7 +6054,7 @@ do
 
         
 -- Language preference
-local Language = "English"
+local Language = "Portuguese"
 local LanguageFile = "tomboy.hook/Language.json"
 
 local function LoadLanguagePreference()
@@ -6061,7 +6112,7 @@ local LanguageMap = {
         ["TP Kill"]="TP Kill", ["Show Charge Bar"]="Mostrar barra de carga", ["Height Offset"]="Deslocamento de altura",
         ["Auto Look At Target"]="Olhar automaticamente para o alvo", ["Auto Triggerbot"]="Triggerbot automático",
         ["Player ESP"]="ESP de jogadores", ["Font"]="Fonte", ["Font Size"]="Tamanho da fonte",
-        ["Force Render All"]="Forçar renderização de todos", ["Infinite Range"]="Alcance infinito",
+["Infinite Range"]="Alcance infinito",
         ["Enable ESP"]="Ativar ESP", ["Visible Check"]="Verificação de visibilidade", ["Box ESP"]="ESP de caixa",
         ["Box Fill"]="Preenchimento da caixa", ["Name ESP"]="ESP de nome", ["Health Bar"]="Barra de vida",
         ["Distance"]="Distância", ["Text Outline"]="Contorno do texto", ["Weapon ESP"]="ESP de arma",
@@ -6104,6 +6155,222 @@ local LanguageMap = {
     }
 }
 
+local PortugueseExtra = {
+    ["Test Tools"] = "Ferramentas de teste",
+    ["Performance Monitor"] = "Monitor de desempenho",
+    ["Auto-save Test Config"] = "Salvamento automático de teste",
+    ["Performance: measuring..."] = "Desempenho: medindo...",
+    ["Performance monitor: Off"] = "Monitor de desempenho: Desligado",
+    ['Global Font'] = 'Fonte global',
+    ['Profiles list'] = 'Lista de perfis',
+    ['Set AutoLoad: None'] = 'Definir carregamento automático: Nenhum',
+    ['Player ESP'] = 'ESP de jogadores',
+    ['Options'] = 'Opções',
+    ['Font'] = 'Fonte',
+    ['Font Size'] = 'Tamanho da fonte',
+    ['Infinite Range'] = 'Alcance infinito',
+    ['Enable ESP'] = 'Ativar ESP',
+    ['Visible Check'] = 'Verificação de visibilidade',
+    ['ESP Outline'] = 'Contorno do ESP',
+    ['Outline Visible Check'] = 'Verificação de visibilidade do contorno',
+    ['Box ESP'] = 'ESP de caixa',
+    ['Box Fill'] = 'Preenchimento da caixa',
+    ['Name ESP'] = 'ESP de nome',
+    ['Health Bar'] = 'Barra de vida',
+    ['Distance'] = 'Distância',
+    ['Text Outline'] = 'Contorno do texto',
+    ['Weapon ESP'] = 'ESP de arma',
+    ['Skeleton'] = 'Esqueleto',
+    ['Chams'] = 'Chams',
+    ['Chams Outline'] = 'Contorno dos Chams',
+    ['Chams Visible Only'] = 'Chams apenas visíveis',
+    ['Chams Material'] = 'Material dos Chams',
+    ['Rainbow Chams'] = 'Chams arco-íris',
+    ['Pulse Chams'] = 'Chams pulsantes',
+    ['Visible Split Chams'] = 'Chams divididos por visibilidade',
+    ['Health Color Chams'] = 'Chams por vida',
+    ['Outline Pulse Chams'] = 'Pulso do contorno dos Chams',
+    ['Strobe Chams'] = 'Chams estroboscópicos',
+    ['Health Bar Thickness'] = 'Espessura da barra de vida',
+    ['Health Glow Size'] = 'Tamanho do brilho da vida',
+    ['Corpse ESP'] = 'ESP de cadáveres',
+    ['Show Name'] = 'Mostrar nome',
+    ['Show Distance'] = 'Mostrar distância',
+    ['Outline'] = 'Contorno',
+    ['Enable'] = 'Ativar',
+    ['Lighting'] = 'Iluminação',
+    ['Objects'] = 'Objetos',
+    ['Camera/Effects'] = 'Câmera/Efeitos',
+    ['Viewmodel'] = 'Modelo da arma',
+    ['Character'] = 'Personagem',
+    ['Detection'] = 'Detecção',
+    ['Quest Objectives'] = 'Objetivos de missões',
+    ['Quest Objective ESP'] = 'ESP de objetivos',
+    ['Active Quest Info'] = 'Informações da missão ativa',
+    ['Boss Checklist'] = 'Lista de chefes',
+    ['Death'] = 'Morto',
+    ['Alive'] = 'Vivo',
+    ['Team'] = 'Time',
+    ['Create'] = 'Criar',
+    ['Delete'] = 'Excluir',
+    ['Load'] = 'Carregar',
+    ['Overwrite'] = 'Sobrescrever',
+    ['Refresh'] = 'Atualizar',
+    ['Cancel'] = 'Cancelar',
+    ['Close'] = 'Fechar',
+    ['Apply'] = 'Aplicar',
+    ['Clear'] = 'Limpar',
+    ['Copy'] = 'Copiar',
+    ['Paste'] = 'Colar',
+    ['Rejoin'] = 'Reconectar',
+    ['Unload'] = 'Descarregar',
+    ['Settings'] = 'Configurações',
+    ['My Profile'] = 'Meu perfil',
+    ['Watermark'] = "Marca d'água",
+    ['Keybind List'] = 'Lista de teclas',
+    ['Moderator List'] = 'Lista de moderadores',
+    ['Language / Idioma'] = 'Idioma',
+    ['English'] = 'Inglês',
+    ['Portuguese'] = 'Português',
+    ['Config name'] = 'Nome da configuração',
+    ['Auto Load Config'] = 'Carregar configuração automaticamente',
+    ['Clear Auto Config'] = 'Limpar carregamento automático',
+    ['Theming'] = 'Tema',
+    ['Silent Aim'] = 'Mira silenciosa',
+    ['Aim Part'] = 'Parte da mira',
+    ['Randomize Hit Part'] = 'Randomizar parte atingida',
+    ['Instant Hit'] = 'Acerto instantâneo',
+    ['Wallbang'] = 'Atravessar paredes',
+    ['Manipulation'] = 'Manipulação',
+    ['Manipulation Distance'] = 'Distância de manipulação',
+    ['Crosshair Status'] = 'Status da mira',
+    ['Target AI'] = 'Alvo IA',
+    ['Target Heli'] = 'Alvo helicóptero',
+    ['Use FOV'] = 'Usar FOV',
+    ['Show FOV Circle'] = 'Mostrar círculo do FOV',
+    ['Target Line'] = 'Linha do alvo',
+    ['Visible Targets Only'] = 'Apenas alvos visíveis',
+    ['FOV Outline Glow'] = 'Brilho do contorno do FOV',
+    ['FOV Size'] = 'Tamanho do FOV',
+    ['FOV Glow Intensity'] = 'Intensidade do brilho do FOV',
+    ['Whitelist Players'] = 'Jogadores na whitelist',
+    ['Whitelist Mode'] = 'Modo whitelist',
+    ['Bullet Tracer'] = 'Traçador de balas',
+    ['Tracer Style'] = 'Estilo do traçador',
+    ['Tracer Thickness'] = 'Espessura do traçador',
+    ['Tracer Lifetime'] = 'Duração do traçador',
+    ['Triggerbot'] = 'Triggerbot',
+    ['Enabled'] = 'Ativado',
+    ['Gun Mods'] = 'Modificações de armas',
+    ['No Spread'] = 'Sem dispersão',
+    ['No Gun Bob'] = 'Sem balanço da arma',
+    ['Instant Aim'] = 'Mira instantânea',
+    ['Force Auto'] = 'Forçar automático',
+    ['Rapid Fire'] = 'Tiro rápido',
+    ['Rapid Fire Delay'] = 'Atraso do tiro rápido',
+    ['No Recoil'] = 'Sem recuo',
+    ['Instant Mag Refill'] = 'Recarregar carregador instantaneamente',
+    ['Anti Aim'] = 'Anti-mira',
+    ['Mode'] = 'Modo',
+    ['Yaw Offset'] = 'Deslocamento Yaw',
+    ['Pitch Tilt'] = 'Inclinação Pitch',
+    ['Fake Lag'] = 'Lag falso',
+    ['Fake Lag Interval'] = 'Intervalo do lag falso',
+    ['Resolve Desync'] = 'Resolver desync',
+    ['Visualize Server Pos'] = 'Visualizar posição do servidor',
+    ['Visualize Transparency'] = 'Transparência da visualização',
+    ['Custom Offset'] = 'Deslocamento personalizado',
+    ['Offset Radius'] = 'Raio do deslocamento',
+    ['Floor Clip'] = 'Atravessar chão',
+    ['Floor Clip Depth'] = 'Profundidade do chão',
+    ['UG Resolver (Hold X)'] = 'Resolver UG (segure X)',
+    ['UG Resolver Depth'] = 'Profundidade do UG',
+    ['TP Kill'] = 'TP Kill',
+    ['Show Charge Bar'] = 'Mostrar barra de carga',
+    ['Height Offset'] = 'Deslocamento de altura',
+    ['Auto Look At Target'] = 'Olhar automaticamente para o alvo',
+    ['Auto Triggerbot'] = 'Triggerbot automático',
+    ['Instant Equip'] = 'Equipamento instantâneo',
+    ['Auto Shoot Packet'] = 'Disparo automático por pacote',
+    ['Packet Prediction'] = 'Previsão de pacote',
+    ['Hitscan'] = 'Hitscan',
+    ['Hitscan Walls'] = 'Hitscan através de paredes',
+    ['Shoot Speed Mult'] = 'Multiplicador de velocidade de tiro',
+    ['Target Info'] = 'Informações do alvo',
+    ['Target Info Size'] = 'Tamanho das informações',
+    ['Target Info Fixed'] = 'Fixar informações do alvo',
+    ['Shoot On Manipulated'] = 'Atirar em manipulado',
+    ['Instant Mosin (R7)'] = 'Mosin instantâneo (R7)',
+    ['Custom Gun Sound'] = 'Som de arma personalizado',
+    ['Custom Hit Sound'] = 'Som de acerto personalizado',
+    ['Custom Sounds'] = 'Sons personalizados',
+    ['Gun Sound'] = 'Som da arma',
+    ['Gun Volume'] = 'Volume da arma',
+    ['Hit Sound'] = 'Som de acerto',
+    ['Hit Volume'] = 'Volume do acerto',
+    ['Test Gun Sound'] = 'Testar som de arma',
+    ['Test Hit Sound'] = 'Testar som de acerto',
+    ['Hit/Kill Effect'] = 'Efeito de acerto/abate',
+    ['Hit Effect Stars'] = 'Estrelas do efeito de acerto',
+    ['No Screen Effects'] = 'Sem efeitos de tela',
+    ['Remove Muzzle Flash'] = 'Remover clarão do disparo',
+    ['FOV Override'] = 'Substituir FOV',
+    ['Zoom'] = 'Zoom',
+    ['Zoom Size'] = 'Tamanho do zoom',
+    ['Freecam'] = 'Câmera livre',
+    ['Speedhack'] = 'Hack de velocidade',
+    ['Third Person'] = 'Terceira pessoa',
+    ['3P Distance'] = 'Distância da 3ª pessoa',
+    ['No Fall Damage'] = 'Sem dano de queda',
+    ['Run On Water'] = 'Correr na água',
+    ['Remove Mines'] = 'Remover minas',
+    ['Fly Hack'] = 'Hack de voo',
+    ['Y Speed'] = 'Velocidade Y',
+    ['Unlock All Skins'] = 'Desbloquear todas as skins',
+    ['Skins'] = 'Skins',
+    ['Arm Chams'] = 'Chams dos braços',
+    ['Arm Material'] = 'Material dos braços',
+    ['Gun Chams'] = 'Chams da arma',
+    ['Gun Material'] = 'Material da arma',
+    ['X Offset'] = 'Deslocamento X',
+    ['Y Offset'] = 'Deslocamento Y',
+    ['Z Offset'] = 'Deslocamento Z',
+    ['Inventory'] = 'Inventário',
+    ['Item Finder'] = 'Localizador de itens',
+    ['Inventory Checker'] = 'Verificador de inventário',
+    ['Show Full Inventory'] = 'Mostrar inventário completo',
+    ['Show Value'] = 'Mostrar valor',
+    ['Check Corpse'] = 'Verificar cadáver',
+    ['Enable Dragging'] = 'Permitir arrastar',
+    ['Size'] = 'Tamanho',
+    ['Items To Find'] = 'Itens para encontrar',
+    ['Enable Item Finder'] = 'Ativar localizador de itens',
+    ['Glow Size'] = 'Tamanho do brilho',
+    ['Time Changer'] = 'Alterar horário',
+    ['Time'] = 'Horário',
+    ['Ambient'] = 'Ambiente',
+    ['No Fog'] = 'Sem neblina',
+    ['No Grass'] = 'Sem grama',
+    ['No Clouds'] = 'Sem nuvens',
+    ['Custom Skybox'] = 'Céu personalizado',
+    ['No Shadows'] = 'Sem sombras',
+    ['No Leafs'] = 'Sem folhas',
+    ['Extreme Potato Mode'] = 'Modo batata extremo',
+    ['Show Extractions'] = 'Mostrar extrações',
+    ['Show Cars'] = 'Mostrar carros',
+    ['Hit Logs'] = 'Registros de acertos',
+    ['Speed'] = 'Velocidade',
+    ['Radius'] = 'Raio',
+    ['Thickness'] = 'Espessura',
+    ['Gap'] = 'Espaço',
+    ['Crosshair'] = 'Mira',
+    ['MainScale'] = 'Escala principal',
+    ['Finder X Position'] = 'Posição X do localizador',
+    ['Finder Y Position'] = 'Posição Y do localizador',
+    ['Text Size'] = 'Tamanho do texto',
+    ['Y Position'] = 'Posição Y',
+}
+
 local function ApplyLanguage()
     local root = Library.Holder and Library.Holder.Instance
     if not root then return end
@@ -6115,7 +6382,7 @@ local function ApplyLanguage()
                 original = obj.Text
                 pcall(function() obj:SetAttribute("KnOriginalText", original) end)
             end
-            local translated = LanguageMap[Language][original]
+            local translated = LanguageMap[Language][original] or (Language == "Portuguese" and PortugueseExtra[original])
             if translated then
                 obj.Text = translated
             else
@@ -6153,7 +6420,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                 Callback = function(Value)
                     if Value == "English" or Value == "Portuguese" then
                         SaveLanguagePreference(Value)
-                        ApplyLanguage()
+                        if Library.ApplyLanguage then Library.ApplyLanguage() else ApplyLanguage() end
                         Library:Notification(
                             Value == "Portuguese"
                                 and "Idioma salvo. Execute novamente para aplicar as traduções."
@@ -6301,17 +6568,6 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                 end
             })
 
-            -- Keep the original Save button as a compatibility alias.
-            ConfigsSection:Button({
-                Name = "Save",
-                Callback = function()
-                    if ConfigSelected ~= nil then
-                        writefile(Library.Folders.Configs .. "/" .. ConfigSelected .. ".json", Library:GetConfig())
-                        Library:Notification("Saved config " .. ConfigSelected .. ".json", 5)
-                    end
-                end
-            })
-
             ConfigsSection:Button({
                 Name = "Refresh",
                 Callback = function()
@@ -6377,6 +6633,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
             end
         end
         ApplyLanguage()
+        Library.ApplyLanguage = ApplyLanguage
         return SettingsPage
     end
 end
@@ -6588,7 +6845,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             textSize = 14,
             textFont = Drawing.Fonts.Monospace,
             distancelimit = true,
-            maxdistance = 600,
+            maxdistance = 1200,
             fadetime = 1,
             infiniterange = false
         },
@@ -6615,6 +6872,9 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 health_outline = false,
                 dist_outline = false,
                 visible_check = true,
+                outline = false,
+                outline_visible_check = true,
+                outline_color = { Color3.fromRGB(255, 255, 255), 1 },
                 box_color = { Color3.new(1, 1, 1), 1 },
                 box_fill_color = { Color3.new(1, 0, 0), 0.5 },
                 realname_color = { Color3.new(1, 1, 1), 1 },
@@ -6776,6 +7036,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 weapon = esp.create_obj("Text", { Center = true, Visible = false }),
             },
             chams_object = Instance.new("Highlight", container),
+            outline_object = Instance.new("Highlight", container),
             chams_active = false,
             chams_original = {},
             last_chams_update = 0,
@@ -6802,6 +7063,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
         local dist = obj.dist
         local weapon = obj.weapon
         local cham = plr.chams_object
+        local outline = plr.outline_object
         local cham_original = plr.chams_original
         local settings = esp_table.settings.enemy
         local main_settings = esp_table.main_settings
@@ -6815,15 +7077,22 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             -- Recalculate line-of-sight continuously so Visible Check never becomes stale.
             plr._esp_visible = settings.visible_check and esp_is_visible(character) or false
             local _esp_green = Color3.fromRGB(0, 255, 0)
-            box.Color = plr._esp_visible and _esp_green or settings.box_color[1]
-            box_fill.Color = plr._esp_visible and _esp_green or settings.box_fill_color[1]
-            realname.Color = plr._esp_visible and _esp_green or settings.realname_color[1]
-            dist.Color = plr._esp_visible and _esp_green or settings.dist_color[1]
-            weapon.Color = plr._esp_visible and _esp_green or settings.weapon_color[1]
+            local _team_blue = Color3.fromRGB(60, 150, 255)
+            local _is_team = (not isnpc) and silent_aim and silent_aim.native_whitelist and silent_aim.native_whitelist[player.Name] or false
+            if not _is_team and (not isnpc) and silent_aim and silent_aim.whitelist_mode and silent_aim.whitelist then
+                _is_team = silent_aim.whitelist[player.Name] == true
+            end
+            local _esp_color = _is_team and _team_blue or (plr._esp_visible and _esp_green or nil)
+            box.Color = _esp_color or settings.box_color[1]
+            box_fill.Color = _esp_color or settings.box_fill_color[1]
+            realname.Color = _esp_color or settings.realname_color[1]
+            dist.Color = _esp_color or settings.dist_color[1]
+            weapon.Color = _esp_color or settings.weapon_color[1]
+            outline.OutlineColor = _esp_color or settings.outline_color[1]
             for required, _ in next, skeleton_order do
                 local skeletonobj = obj["skeleton_" .. required]
                 if skeletonobj then
-                    skeletonobj.Color = plr._esp_visible and _esp_green or settings.skeleton_color[1]
+                    skeletonobj.Color = _esp_color or settings.skeleton_color[1]
                 end
             end
         end
@@ -6838,6 +7107,10 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             cham.FillTransparency = isWireframe and 1 or settings.chams_fill_color[2]
             cham.OutlineColor = settings.chamsoutline_color[1]
             cham.OutlineTransparency = settings.chams_outline and settings.chamsoutline_color[2] or 1
+            outline.Adornee = character
+            outline.FillTransparency = 1
+            outline.OutlineTransparency = settings.outline and settings.outline_color[2] or 1
+            outline.DepthMode = settings.outline_visible_check and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
             realname.Size = main_settings.textSize
             realname.Font = main_settings.textFont
             realname.Outline = settings.dist_outline
@@ -6866,6 +7139,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             end
             if setvis_cache then
                 cham.Enabled = settings.chams
+                outline.Enabled = settings.outline
                 box.Visible = settings.box
                 box_fill.Visible = settings.box_fill
                 realname.Visible = settings.realname
@@ -6899,8 +7173,10 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 if not bool then
                         for _, v in obj do v.Visible = false end
                         cham.Enabled = false
+                        outline.Enabled = false
                 else
                     cham.Enabled = settings.chams
+                    outline.Enabled = settings.outline
                     box.Visible = settings.box
                     box_fill.Visible = settings.box_fill
                     realname.Visible = settings.realname
@@ -7038,7 +7314,8 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 
                 local pos = _Vector2new((corners.topLeft.X + corners.topRight.X) * 0.5, top_text_y) - Vector2.yAxis
                 realname.Position = pos - (Vector2.yAxis * realname.TextBounds.Y) - _Vector2new(0, 2)
-                realname.Text = isnpc and ("BOT | " .. player.Name) or player.Name
+                local _team_mark = (not isnpc) and silent_aim and ((silent_aim.native_whitelist and silent_aim.native_whitelist[player.Name]) or (silent_aim.whitelist_mode and silent_aim.whitelist and silent_aim.whitelist[player.Name]))
+                realname.Text = isnpc and ("BOT | " .. player.Name) or (player.Name .. (_team_mark and " [TEAM]" or ""))
                 realname.OutlineColor = settings.dist_outline_color
             end
             do
@@ -7052,7 +7329,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                     plr._gun_cache_text = isnpc and "" or esp_table.get_gun(player)
                 end
                 weapon.Text = plr._gun_cache_text or ""
-                weapon.Position = pos + (dist.Visible and Vector2.yAxis * dist.TextBounds.Y - _Vector2new(0, 2) or Vector2.zero)
+                weapon.Position = pos + Vector2.yAxis * (dist.TextBounds.Y + 10)
                 
                 dist.OutlineColor = settings.dist_outline_color
                 weapon.OutlineColor = settings.dist_outline_color
@@ -7531,7 +7808,8 @@ cheat._gun_sounds_volume = function()
     return Library and Library.Flags.snd_gs_vol or 100
 end
 cheat._hitmarker_sounds_volume = function()
-    return Library and Library.Flags.snd_hs_vol or 100
+    pcall(function() if Library.ApplyLanguage then Library.ApplyLanguage() end end)
+return Library and Library.Flags.snd_hs_vol or 100
 end
 
 -- World globals (shared with __newindex hook)
@@ -8430,6 +8708,201 @@ local ConfigCat  = MiscPage
 local HitLogCat  = MiscPage
 
 local SettingsPage = Library:CreateSettingsPage(Window, KeybindList, Watermark)
+
+-- ================================================================
+-- TEST BUILD 2
+-- Favorites, quick access, ESP presets, performance monitor and autosave.
+-- ================================================================
+do
+    local TestTools = SettingsPage:Section({Name = "Test Build 2", Side = 1})
+
+    local function safe_flag(flag, value)
+        pcall(function()
+            if Library.SetFlags and Library.SetFlags[flag] then
+                Library.SetFlags[flag](value)
+            else
+                Library.Flags[flag] = value
+            end
+        end)
+    end
+
+    -- Performance monitor
+    local PerfLabel = TestTools:Label("FPS: --  |  Ping: --  |  Players: --")
+    local perf_enabled = true
+    local perf_last = os.clock()
+    local perf_frames = 0
+
+    TestTools:Toggle({
+        Name = "Performance Monitor",
+        Flag = "test2_performance_monitor",
+        Default = true,
+        Callback = function(Value)
+            perf_enabled = Value
+            if not Value then
+                PerfLabel:SetText("Performance Monitor: Off")
+            end
+        end
+    })
+
+    Library:Connect(RunService.RenderStepped, function()
+        if not perf_enabled then return end
+        perf_frames = perf_frames + 1
+        local now = os.clock()
+        if now - perf_last >= 1 then
+            local fps = math.floor((perf_frames / (now - perf_last)) + 0.5)
+            perf_frames = 0
+            perf_last = now
+            local ping = "--"
+            pcall(function()
+                local stats = game:GetService("Stats")
+                local network = stats:FindFirstChild("Network")
+                local server = network and network:FindFirstChild("ServerStatsItem")
+                local item = server and server:FindFirstChild("Data Ping")
+                if item then ping = tostring(math.floor(item:GetValue() + 0.5)) .. " ms" end
+            end)
+            PerfLabel:SetText(string.format("FPS: %d  |  Ping: %s  |  Players: %d", fps, ping, #Players:GetPlayers()))
+        end
+    end, "test2_performance")
+
+    -- Favorite features. These are shortcuts to the existing pages, not new feature implementations.
+    local FavoriteNames = {
+        "Silent Aim", "Player ESP", "Chams", "Crosshair", "Freecam", "Boss Checklist"
+    }
+    local FavoritePages = {
+        ["Silent Aim"] = CombatPage,
+        ["Player ESP"] = VisualsPage,
+        ["Chams"] = VisualsPage,
+        ["Crosshair"] = MiscPage,
+        ["Freecam"] = MiscPage,
+        ["Boss Checklist"] = MiscPage,
+    }
+    local Favorites = {}
+    local FavoriteSlots = {}
+
+    TestTools:Dropdown({
+        Name = "Favorites",
+        Flag = "test2_favorites",
+        Multi = true,
+        Items = FavoriteNames,
+        Default = {},
+        Callback = function(Value)
+            Favorites = type(Value) == "table" and Value or {}
+            for i = 1, 4 do
+                local slot = FavoriteSlots[i]
+                if slot then
+                    local name = nil
+                    local count = 0
+                    for _, candidate in ipairs(FavoriteNames) do
+                        if Favorites[candidate] then
+                            count = count + 1
+                            if count == i then name = candidate break end
+                        end
+                    end
+                    slot:SetText(name and ("★ " .. name) or ("Favorite " .. i .. ": empty"))
+                    slot._favorite_name = name
+                end
+            end
+        end
+    })
+
+    for i = 1, 4 do
+        local button = TestTools:Button({
+            Name = "Favorite " .. i .. ": empty",
+            Callback = function()
+                local name = button._favorite_name
+                local page = name and FavoritePages[name]
+                if page then
+                    Window:SetOpen(true)
+                    page:Turn(true)
+                end
+            end
+        })
+        FavoriteSlots[i] = button
+    end
+
+    -- Quick access to the most-used pages.
+    local Quick = SettingsPage:Section({Name = "Quick Access", Side = 1})
+    local function quick_button(label, page)
+        Quick:Button({
+            Name = label,
+            Callback = function()
+                Window:SetOpen(true)
+                page:Turn(true)
+            end
+        })
+    end
+    quick_button("Combat", CombatPage)
+    quick_button("Visuals", VisualsPage)
+    quick_button("Misc", MiscPage)
+
+    -- ESP presets. Existing controls are changed through their normal callbacks.
+    local Presets = SettingsPage:Section({Name = "ESP Presets", Side = 2})
+    local function set_esp_flags(values)
+        for flag, value in pairs(values) do safe_flag(flag, value) end
+        pcall(function() cheat.EspLibrary.icaca() end)
+    end
+
+    Presets:Button({Name = "Minimal", Callback = function()
+        set_esp_flags({
+            esp_on=true, esp_box=true, esp_boxfill=false, esp_name=true, esp_health=false,
+            esp_dist=true, esp_weapon=false, esp_skeleton=false, esp_chams=false, esp_outline=false
+        })
+    end})
+    Presets:Button({Name = "Competitive", Callback = function()
+        set_esp_flags({
+            esp_on=true, esp_box=true, esp_boxfill=false, esp_name=true, esp_health=true,
+            esp_dist=true, esp_weapon=true, esp_skeleton=true, esp_chams=false, esp_outline=true
+        })
+    end})
+    Presets:Button({Name = "Full", Callback = function()
+        set_esp_flags({
+            esp_on=true, esp_box=true, esp_boxfill=true, esp_name=true, esp_health=true,
+            esp_dist=true, esp_weapon=true, esp_skeleton=true, esp_chams=true, esp_chams_outline=true,
+            esp_outline=true
+        })
+    end})
+    Presets:Button({Name = "Performance", Callback = function()
+        set_esp_flags({
+            esp_on=true, esp_box=true, esp_boxfill=false, esp_name=true, esp_health=false,
+            esp_dist=true, esp_weapon=false, esp_skeleton=false, esp_chams=false, esp_outline=false
+        })
+    end})
+
+    -- Auto-save the current configuration every 10 seconds.
+    local autosave_enabled = false
+    local autosave_path = nil
+    pcall(function()
+        if makefolder and not isfolder("tomboy.hook") then makefolder("tomboy.hook") end
+        if makefolder and not isfolder("tomboy.hook/Configs") then makefolder("tomboy.hook/Configs") end
+        autosave_path = (Library.Folders and Library.Folders.Configs or "tomboy.hook/Configs") .. "/test2_autosave.json"
+    end)
+
+    TestTools:Toggle({
+        Name = "Auto-save",
+        Flag = "test2_autosave",
+        Default = false,
+        Callback = function(Value)
+            autosave_enabled = Value
+            if Value then Library:Notification("Auto-save enabled", 3) end
+        end
+    })
+
+    Library:Thread(function()
+        while true do
+            task.wait(10)
+            if autosave_enabled and autosave_path and writefile then
+                pcall(function()
+                    local config = Library:GetConfig()
+                    if type(config) == "string" and #config > 0 then
+                        writefile(autosave_path, config)
+                    end
+                end)
+            end
+        end
+    end)
+end
+
+
 do
     local AimL = AimbotCat:Section({ Name = "Silent Aim", Side = 1 })
     local AimR = AimbotCat:Section({ Name = "Options",    Side = 2 })
@@ -9332,45 +9805,30 @@ do
         cheat.EspLibrary.icaca()
     end })
     ESPL:Slider({ Name="Font Size",         Flag="esp_fontsize",     Min=1,Max=30,Increment=1,Default=14, Callback=function(v) cheat.EspLibrary.main_settings.textSize=v; cheat.EspLibrary.icaca() end })
-    ESPL:Toggle({ Name="Force Render All",  Flag="ov_forcerender",Callback=function(v)
-        if v then task.spawn(function()
-            local last_req={}
-            while Library.Flags.ov_forcerender do
-                task.wait(0.5)
-                pcall(function()
-                    local rp  = ReplicatedStorage:FindFirstChild("Players")
-                    local mc  = Players.LocalPlayer.Character
-                    local mp  = mc and mc:FindFirstChild("HumanoidRootPart") and mc.HumanoidRootPart.Position
-                    if rp and mp then
-                        for _,p in pairs(Players:GetPlayers()) do
-                            if p~=Players.LocalPlayer and (not p.Character or not p.Character:FindFirstChild("HumanoidRootPart")) then
-                                local rpp = rp:FindFirstChild(p.Name)
-                                local st  = rpp and rpp:FindFirstChild("Status")
-                                local uac = st and st:FindFirstChild("UAC")
-                                local pos = uac and uac:GetAttribute("LastVerifiedPos")
-                                if pos and typeof(pos)=="Vector3" and (pos-mp).Magnitude<=12000 then
-                                    local now = tick()
-                                    if not last_req[p] or now-last_req[p]>1.5 then
-                                        last_req[p]=now
-                                        task.spawn(function() pcall(function() Players.LocalPlayer:RequestStreamAroundAsync(pos,0.5) end) end)
-                                        task.wait(0.2)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-        end) end
-    end }):Keybind({ Flag="ov_forcerender_key", Mode="Toggle", Callback=function(v) if Library.SetFlags["ov_forcerender"] then Library.SetFlags["ov_forcerender"](v) end end })
-    ESPL:Toggle({ Name="Infinite Range",    Flag="esp_infinite",     Callback=function(v) cheat.EspLibrary.main_settings.infiniterange=v; cheat.EspLibrary.icaca() end })
-    ESPL:Slider({ Name="ESP Distance", Flag="esp_distance", Min=50, Max=1000, Increment=10, Default=200, Callback=function(v)
-        cheat.EspLibrary.main_settings.maxdistance = v * 3
+    ESPL:Toggle({ Name="Infinite Range", Flag="esp_infinite", Callback=function(v)
+        cheat.EspLibrary.main_settings.infiniterange = v
+        if v then
+            -- Infinite Range uses a large internal distance while keeping the UI slider capped at 1000m.
+            cheat.EspLibrary.main_settings.maxdistance = 30000 * 3
+            cheat.EspLibrary.main_settings.distancelimit = true
+        else
+            local slider_value = tonumber(Library.Flags.esp_distance) or 400
+            cheat.EspLibrary.main_settings.maxdistance = slider_value * 3
+            cheat.EspLibrary.main_settings.distancelimit = true
+        end
+        cheat.EspLibrary.icaca()
+    end })
+    ESPL:Slider({ Name="ESP Distance", Flag="esp_distance", Min=50, Max=1000, Increment=10, Default=400, Callback=function(v)
+        if not cheat.EspLibrary.main_settings.infiniterange then
+            cheat.EspLibrary.main_settings.maxdistance = v * 3
+        end
         cheat.EspLibrary.main_settings.distancelimit = true
         cheat.EspLibrary.icaca()
     end })
     ESPL:Toggle({ Name="Enable ESP",        Flag="esp_on",           Callback=function(v) es.enabled=v; cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Visible Check",     Flag="esp_visible_check", Default=true, Callback=function(v) es.visible_check=v; cheat.EspLibrary.icaca() end })
+    ESPL:Toggle({ Name="ESP Outline",        Flag="esp_outline", Default=false, Callback=function(v) es.outline=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_outline_col", Default=Color3.fromRGB(255,255,255), Alpha=1, Callback=function(v) local f=Library.Flags.esp_outline_col; es.outline_color[1]=v; es.outline_color[2]=(f and f.Alpha or 1); cheat.EspLibrary.icaca() end })
+    ESPL:Toggle({ Name="Outline Visible Check", Flag="esp_outline_visible", Default=true, Callback=function(v) es.outline_visible_check=v; cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Box ESP",              Flag="esp_box",          Callback=function(v) es.box=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_boxcol",         Default=Color3.new(1,1,1), Alpha=1,   Callback=function(v) local f=Library.Flags.esp_boxcol;         es.box_color[1]=v;             es.box_color[2]=(f and f.Alpha or 1);             cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Box Fill",             Flag="esp_boxfill",      Callback=function(v) es.box_fill=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_boxfillcol",     Default=Color3.new(1,1,1), Alpha=0.5, Callback=function(v) local f=Library.Flags.esp_boxfillcol;     es.box_fill_color[1]=v;        es.box_fill_color[2]=(f and f.Alpha or 0.5);       cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Name ESP",             Flag="esp_name",         Callback=function(v) es.realname=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_namecol",        Default=Color3.new(1,1,1), Alpha=1,   Callback=function(v) local f=Library.Flags.esp_namecol;        es.realname_color[1]=v;        es.realname_color[2]=(f and f.Alpha or 1);         cheat.EspLibrary.icaca() end })
@@ -9396,6 +9854,186 @@ do
     ESPR:Label("Health Bottom"):Colorpicker({ Flag="esp_hbottom", Default=Color3.new(1,0,0), Alpha=1, Callback=function(v) es.health_color_bottom=v; cheat.EspLibrary.icaca() end })
     ESPR:Slider({ Name="Health Bar Thickness", Flag="esp_hthick",    Min=1,Max=10,Increment=1, Default=2, Callback=function(v) es.health_thickness=v;   cheat.EspLibrary.icaca() end })
     ESPR:Slider({ Name="Health Glow Size",     Flag="esp_hglowsize", Min=1,Max=20,Increment=1, Default=5, Callback=function(v) es.health_glow_size=v;   cheat.EspLibrary.icaca() end })
+end
+
+
+-- Boss Checklist: small floating panel with a 20-second full-map scan.
+do
+    local BossNames = {"Dozer", "Anton", "mi24", "whispers"}
+    local BossDisplay = {Dozer="Dozer", Anton="Anton", mi24="MI24", whispers="Whispers"}
+    local boss_panel_gui, boss_panel, boss_rows = nil, nil, {}
+    local boss_enabled = false
+    local boss_scan_token = 0
+
+    local function getBossGuiParent()
+        local parent
+        pcall(function()
+            parent = (gethui and gethui()) or game:GetService("CoreGui")
+        end)
+        return parent or Players.LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local function ensureBossPanel()
+        if boss_panel_gui and boss_panel_gui.Parent then return end
+        boss_panel_gui = Instance.new("ScreenGui")
+        boss_panel_gui.Name = "KnBossChecklist"
+        boss_panel_gui.ResetOnSpawn = false
+        boss_panel_gui.IgnoreGuiInset = true
+        boss_panel_gui.Parent = getBossGuiParent()
+
+        boss_panel = Instance.new("Frame")
+        boss_panel.Name = "Panel"
+        boss_panel.Size = UDim2.fromOffset(170, 125)
+        boss_panel.Position = UDim2.fromOffset(20, 260)
+        boss_panel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+        boss_panel.BorderSizePixel = 0
+        boss_panel.Visible = false
+        boss_panel.Parent = boss_panel_gui
+
+        local corner = Instance.new("UICorner", boss_panel)
+        corner.CornerRadius = UDim.new(0, 6)
+        local stroke = Instance.new("UIStroke", boss_panel)
+        stroke.Color = Color3.fromRGB(55,55,55)
+
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1,-12,0,24)
+        title.Position = UDim2.fromOffset(6,3)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 13
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.TextColor3 = Color3.new(1,1,1)
+        title.Text = Language == "Portuguese" and "Lista de chefes" or "Boss Checklist"
+        title.Parent = boss_panel
+
+        local list = Instance.new("Frame")
+        list.Name = "List"
+        list.BackgroundTransparency = 1
+        list.Position = UDim2.fromOffset(8,28)
+        list.Size = UDim2.new(1,-16,1,-34)
+        list.Parent = boss_panel
+        local layout = Instance.new("UIListLayout", list)
+        layout.Padding = UDim.new(0,2)
+
+        for _, name in ipairs(BossNames) do
+            local row = Instance.new("TextLabel")
+            row.Name = name
+            row.BackgroundTransparency = 1
+            row.Size = UDim2.new(1,0,0,19)
+            row.Font = Enum.Font.Gotham
+            row.TextSize = 12
+            row.TextXAlignment = Enum.TextXAlignment.Left
+            row.TextColor3 = Color3.fromRGB(100,100,100)
+            row.Text = (BossDisplay[name] or name) .. "  [Death]"
+            row.Parent = list
+            boss_rows[name] = row
+        end
+
+        local drag = Instance.new("TextButton")
+        drag.BackgroundTransparency = 1
+        drag.Text = ""
+        drag.Size = UDim2.new(1,0,0,26)
+        drag.Parent = boss_panel
+        drag.ZIndex = 5
+        local dragging, dragStart, startPos
+        drag.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true; dragStart = input.Position; startPos = boss_panel.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        drag.InputChanged:Connect(function(input)
+            if not dragging then return end
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                local delta = input.Position - dragStart
+                boss_panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    local function findBoss(name)
+        local found = false
+        local displayName = BossDisplay[name] or name
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and string.lower(obj.Name) == string.lower(name) then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local hp = hum and hum.Health or obj:GetAttribute("Health")
+                if hp == nil or tonumber(hp) > 0 then
+                    found = true
+                    break
+                end
+            end
+        end
+        return found
+    end
+
+    local function scanBosses()
+        ensureBossPanel()
+        for _, name in ipairs(BossNames) do
+            local alive = false
+            pcall(function() alive = findBoss(name) end)
+            local row = boss_rows[name]
+            if row then
+                if alive then
+                    row.Text = (BossDisplay[name] or name) .. "  [" .. (Language == "Portuguese" and "Vivo" or "Alive") .. "]"
+                    row.TextColor3 = Color3.fromRGB(255,165,0)
+                else
+                    row.Text = (BossDisplay[name] or name) .. "  [" .. (Language == "Portuguese" and "Morto" or "Death") .. "]"
+                    row.TextColor3 = Color3.fromRGB(85,85,85)
+                end
+            end
+        end
+    end
+
+    local function setBossChecklist(v)
+        boss_enabled = v
+        ensureBossPanel()
+        boss_panel.Visible = v
+        boss_scan_token += 1
+        local token = boss_scan_token
+        if v then
+            scanBosses()
+            task.spawn(function()
+                while boss_enabled and token == boss_scan_token do
+                    task.wait(20)
+                    if boss_enabled and token == boss_scan_token then scanBosses() end
+                end
+            end)
+        end
+    end
+
+    -- A 400 HP NPC is also treated as a boss by the scanner's health rule.
+    local oldFindBoss = findBoss
+    findBoss = function(name)
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") then
+                local hum = obj:FindFirstChildOfClass("Humanoid")
+                local hp = hum and hum.Health or tonumber(obj:GetAttribute("Health"))
+                if string.lower(obj.Name) == string.lower(name) or (hp and math.floor(hp + 0.5) == 400) then
+                    if hp == nil or hp > 0 then return true end
+                end
+            end
+        end
+        return false
+    end
+
+    local BossCat = MiscPage:Section({Name="Bosses", Side=2})
+    BossCat:Toggle({Name="Boss Checklist", Flag="boss_checklist", Default=false, Callback=setBossChecklist})
+
+    -- Keep the panel text synchronized with the language dropdown.
+    local oldApplyLanguage = Library.ApplyLanguage
+    Library.ApplyLanguage = function(...)
+        local result = oldApplyLanguage and oldApplyLanguage(...) or nil
+        if boss_panel_gui and boss_panel then
+            local title = boss_panel:FindFirstChild("Title")
+            if title then title.Text = Language == "Portuguese" and "Lista de chefes" or "Boss Checklist" end
+            if boss_enabled then scanBosses() end
+        end
+        return result
+    end
 end
 
 do
