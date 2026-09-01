@@ -728,8 +728,8 @@ local CustomFont = { } do
         return table.concat(out)
     end
 
-    local smallest_pixel_b64 =
-        AAEAAAAMAIAAAwBAT1MvMmSz/H0AAAFIAAAAYFZETVhoYG/3AAAGmAAABeBjbWFwel+AIwAADHgAAAUwZ2FzcP//AAEAAGP4AAAACGdseWa90hIhAAARqAAA
+    local smallest_pixel_b64 = [[
+AAEAAAAMAIAAAwBAT1MvMmSz/H0AAAFIAAAAYFZETVhoYG/3AAAGmAAABeBjbWFwel+AIwAADHgAAAUwZ2FzcP//AAEAAGP4AAAACGdseWa90hIhAAARqAAA
         RRRoZWFk/hqSzwAAAMwAAAA2aGhlYQegBbsAAAEEAAAAJGhtdHhmdgAAAAABqAAABPBsb2Nh73HeDAAAVrwAAAJ6bWF4cAFBADMAAAEoAAAAIG5hbWX/R4pV
         AABZOAAABC1wb3N0fPqooAAAXWgAAAaOAAEAAAABAAArGZw2Xw889QAJA+gAAAAAzSamLgAAAADNJqljAAD/OASwAyAAAAAJAAIAAAAAAAAAAQAAAu7/BgAA
         BRQAAABkBLAAAQAAAAAAAAAAAAAAAAAAATwAAQAAATwAMgAEAAAAAAABAAAAAAAAAAAAAAAAAAAAAAADAfMBkAAFAAACvAKKAAD/nAK8AooAAAD6ADIA+gAA
@@ -1014,6 +1014,7 @@ local CustomFont = { } do
         NzkJYWZpaTEwMDgwCWFmaWkxMDA4MQlhZmlpMTAwODIJYWZpaTEwMDgzCWFmaWkxMDA4NAlhZmlpMTAwODUJYWZpaTEwMDg2CWFmaWkxMDA4NwlhZmlpMTAw
         ODgJYWZpaTEwMDg5CWFmaWkxMDA5MAlhZmlpMTAwOTEJYWZpaTEwMDkyCWFmaWkxMDA5MwlhZmlpMTAwOTQJYWZpaTEwMDk1CWFmaWkxMDA5NglhZmlpMTAw
         OTcNYWZpaTEwMDQ1LjAwMQ1hZmlpMTAwNDcuMDAxAAAAAAAB//8AAA==
+]]
 
     pcall(function()
         local ttfPath = Library.Folders.Assets .. "/SmallestPixel.ttf"
@@ -1065,13 +1066,17 @@ local CustomFont = { } do
 --     Library.Fonts['FSTahoma'] = CustomFont:Get("FSTahoma")
     Library.Fonts['Gotham SSm'] = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.ExtraBold)
 
-    Library.Font = CustomFont:Get("Verdana") or Font.new("rbxasset://fonts/families/GothamSSm.json")
-    Library.espfont = Library.Fonts["Tahoma XP"] or Font.new("rbxasset://fonts/families/GothamSSm.json")
+    -- Global font defaults to Smallest Pixel. If the bundled TTF is not ready yet,
+    -- use a safe UI fallback temporarily; SetGlobalFont will switch to Smallest Pixel
+    -- as soon as the FontFace becomes available.
+    local SmallestPixelFont = Library.Fonts["Smallest Pixel"]
+    Library.Font = SmallestPixelFont or Library.Fonts["Verdana"] or Font.new("rbxasset://fonts/families/GothamSSm.json")
+    Library.espfont = SmallestPixelFont or Library.Fonts["Verdana"] or Font.new("rbxasset://fonts/families/GothamSSm.json")
 
-    -- Global font support. Custom fonts are represented by FontFace on UI objects;
-    -- Drawing ESP implementations generally expose only Drawing.Fonts, so we map
-    -- custom pixel fonts to the closest monospace drawing font where necessary.
-    Library.FontName = "Verdana"
+    -- Global font support. Roblox UI objects can use the real custom FontFace.
+    -- Drawing APIs generally expose only their built-in font enum, so custom TTF
+    -- names are mapped to the closest available Drawing font for ESP.
+    Library.FontName = "Smallest Pixel"
     Library.DrawingFont = Drawing.Fonts.Monospace
     Library.FontDrawingMap = {
         ["UI"] = Drawing.Fonts.UI,
@@ -1171,6 +1176,18 @@ local CustomFont = { } do
         end)
         return true
     end
+
+    -- Apply the selected default after startup and retry while the bundled TTF
+    -- finishes loading. This updates existing UI + Drawing ESP objects as well.
+    task.spawn(function()
+        for _ = 1, 80 do
+            if Library.Fonts["Smallest Pixel"] then
+                Library:SetGlobalFont("Smallest Pixel")
+                break
+            end
+            task.wait(0.15)
+        end
+    end)
 end
 
 task.wait()
@@ -8383,7 +8400,7 @@ task.wait(0.2)
 Library.Holder.Instance.Enabled = false
 local logoAsset = isfile("tomboy.hook/Assets/logo.png") and getcustomasset("tomboy.hook/Assets/logo.png") or nil
 local Window     = Library:Window({ Name = "Kn v1.0.0 PREMIUM", Logo = logoAsset or "" })
-local Watermark  = Window:Watermark("Kn v8 PREMIUM")
+local Watermark  = Window:Watermark("Kn v1.0.0 PREMIUM")
 local KeybindList= Window:KeybindList()
 
 local CombatPage  = Window:Page({ Name = "Combat"  })
