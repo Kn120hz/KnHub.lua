@@ -54,6 +54,9 @@ local Library do
 
         OpenFrames = { },
 
+        -- Persistent positions for draggable/floating windows.
+        WindowPositions = { },
+
         SetFlags = { },
 
         UnnamedConnections = 0,
@@ -1242,6 +1245,11 @@ Instances:Create("UIPadding", {
 task.wait()
 
 Library.Unload = function(self)
+    pcall(function()
+        for _, c in ipairs(KN_ParticleConnections) do c:Disconnect() end
+        table.clear(KN_ParticleConnections)
+    end)
+    pcall(function() KNStateManager:Cleanup() end)
     for Index, Value in self.Connections do 
         Value.Connection:Disconnect()
     end
@@ -1381,6 +1389,58 @@ Library.AddToTheme = function(self, Item, Properties)
     self.ThemeMap[Item] = ThemeData
 end
 
+# ============================================================
+-- Persistent window positions
+-- ============================================================
+Library.RegisterWindowPosition = function(self, Name, Gui)
+    if not Name or not Gui then return end
+    local Instance = Gui.Instance or Gui
+    if not Instance then return end
+    self.WindowPositions[tostring(Name)] = Instance
+end
+
+Library.CaptureWindowPositions = function(self)
+    local Positions = { }
+    for Name, Gui in pairs(self.WindowPositions) do
+        local Instance = Gui and (Gui.Instance or Gui)
+        if Instance and Instance.Parent then
+            local Pos = Instance.Position
+            Positions[Name] = {
+                XScale = tonumber(Pos.X.Scale) or 0,
+                XOffset = tonumber(Pos.X.Offset) or 0,
+                YScale = tonumber(Pos.Y.Scale) or 0,
+                YOffset = tonumber(Pos.Y.Offset) or 0,
+            }
+            if Name == "Inventory" then
+                self.Flags.inv_x = Positions[Name].XOffset
+                self.Flags.inv_y = Positions[Name].YOffset
+            end
+        end
+    end
+    return Positions
+end
+
+Library.ApplyWindowPositions = function(self, Positions)
+    if type(Positions) ~= "table" then return end
+    task.defer(function()
+        for Name, Data in pairs(Positions) do
+            local Gui = self.WindowPositions[tostring(Name)]
+            local Instance = Gui and (Gui.Instance or Gui)
+            if Instance and Instance.Parent and type(Data) == "table" then
+                local xs = tonumber(Data.XScale) or 0
+                local xo = tonumber(Data.XOffset) or 0
+                local ys = tonumber(Data.YScale) or 0
+                local yo = tonumber(Data.YOffset) or 0
+                Instance.Position = UDim2.new(xs, xo, ys, yo)
+                if Name == "Inventory" then
+                    self.Flags.inv_x = xo
+                    self.Flags.inv_y = yo
+                end
+            end
+        end
+    end)
+end
+
 Library.GetConfig = function(self)
     local Config = { } 
 
@@ -1396,6 +1456,8 @@ Library.GetConfig = function(self)
         end
     end)
 
+    Config.__KnWindowPositions = Library:CaptureWindowPositions()
+
     return HttpService:JSONEncode(Config)
 end
 
@@ -1404,6 +1466,10 @@ Library.LoadConfig = function(self, Config)
 
     local Success, Result = Library:SafeCall(function()
         for Index, Value in Decoded do 
+            if Index == "__KnWindowPositions" then
+                continue
+            end
+
             local SetFunction = Library.SetFlags[Index]
 
             if not SetFunction then
@@ -1418,6 +1484,8 @@ Library.LoadConfig = function(self, Config)
                 SetFunction(Value)
             end
         end
+
+        Library:ApplyWindowPositions(Decoded.__KnWindowPositions)
     end)
 
     return Success, Result
@@ -2952,6 +3020,7 @@ do
         Watermark:SetText(Name)
         Watermark.Frame = Items["Watermark"].Instance
         Items["Watermark"]:MakeDraggable()
+        Library:RegisterWindowPosition("Watermark", Items["Watermark"])
 
         return Watermark
     end
@@ -3112,6 +3181,7 @@ do
 
         KeybindList.Frame = Items["KeybindList"].Instance
         Items["KeybindList"]:MakeDraggable()
+        Library:RegisterWindowPosition("KeybindList", Items["KeybindList"])
 
         return KeybindList
     end
@@ -3134,6 +3204,7 @@ do
             })  Items["ModList"]:AddToTheme({BackgroundColor3 = "Background 2"})
 
             Items["ModList"]:MakeDraggable()
+            Library:RegisterWindowPosition("ModList", Items["ModList"])
 
             Instances:Create("UIPadding", {
                 Parent = Items["ModList"].Instance,
@@ -3386,6 +3457,7 @@ do
             })  Items["ArmorViewer"]:AddToTheme({BackgroundColor3 = "Background 2"})
 
             Items["ArmorViewer"]:MakeDraggable()
+            Library:RegisterWindowPosition("ArmorViewer", Items["ArmorViewer"])
 
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["ArmorViewer"].Instance,
@@ -3698,6 +3770,7 @@ do
             })  Items["TargetHud"]:AddToTheme({BackgroundColor3 = "Background 1"})
 
             Items["TargetHud"]:MakeDraggable()
+            Library:RegisterWindowPosition("TargetHud", Items["TargetHud"])
             
             Instances:Create("UIStroke", {
                 Parent = Items["TargetHud"].Instance,
@@ -4016,6 +4089,7 @@ do
             })
 
             Items["MainFrame"]:MakeDraggable(Items["DragHandle"])
+            Library:RegisterWindowPosition("MainWindow", Items["MainFrame"])
             Items["MainFrame"]:MakeResizeable(Vector2New(621, 542), Vector2New(9999, 9999))
             
             Items["UIStroke"] = Instances:Create("UIStroke", {
@@ -4277,6 +4351,8 @@ do
             ZIndex = 10001
         })
         Items["ExternalToggleIcon"]:AddToTheme({TextColor3 = "Text"})
+
+        Library:RegisterWindowPosition("ExternalToggle", Items["ExternalToggle"])
 
         Instances:Create("UICorner", {
             Parent = Items["ExternalToggle"].Instance,
@@ -6512,7 +6588,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                         if not isfile(path) then
                             writefile(path, Library:GetConfig())
                             Library:RefreshConfigsList(ConfigsSearchbox)
-                            Library:Notification("Created config " .. ConfigName .. ".json", 5)
+                            Library:Notification("Created config " .. ConfigName .. ".json (with window positions)", 5)
                         else
                             Library:Notification("Config already exists. Use Overwrite.", 5)
                         end
@@ -6572,7 +6648,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                 Callback = function()
                     if ConfigSelected ~= nil then
                         writefile(Library.Folders.Configs .. "/" .. ConfigSelected .. ".json", Library:GetConfig())
-                        Library:Notification("Overwrote config " .. ConfigSelected .. ".json", 5)
+                        Library:Notification("Overwrote config " .. ConfigSelected .. ".json (with window positions)", 5)
                     end
                 end
             })
@@ -8736,6 +8812,110 @@ task.wait(0.2)
 Library.Holder.Instance.Enabled = false
 local logoAsset = isfile("tomboy.hook/Assets/logo.png") and getcustomasset("tomboy.hook/Assets/logo.png") or nil
 local Window     = Library:Window({ Name = "Kn v1.0.0 PREMIUM", Logo = logoAsset or "" })
+
+-- ============================================================
+-- KN PERFORMANCE HUD - ALWAYS VISIBLE + SAVED POSITION
+-- ============================================================
+do
+    local ok, err = pcall(function()
+        local CoreGui = game:GetService("CoreGui")
+        local RunService = game:GetService("RunService")
+        local Players = game:GetService("Players")
+        local Stats = game:GetService("Stats")
+        local UIS = game:GetService("UserInputService")
+
+        local parent = (gethui and gethui()) or CoreGui
+        local old = parent:FindFirstChild("KN_PerformanceHUD")
+        if old then old:Destroy() end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "KN_PerformanceHUD"
+        gui.ResetOnSpawn = false
+        gui.IgnoreGuiInset = true
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        gui.Parent = parent
+
+        local frame = Instance.new("Frame")
+        frame.Name = "Panel"
+        frame.Size = UDim2.fromOffset(185, 64)
+        frame.Position = UDim2.new(0, 12, 0, 70)
+        frame.BackgroundTransparency = 0.18
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+        Library:RegisterWindowPosition("PerformanceHUD", frame)
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = frame
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Thickness = 1
+        stroke.Transparency = 0.35
+        stroke.Parent = frame
+
+        local title = Instance.new("TextLabel")
+        title.BackgroundTransparency = 1
+        title.Size = UDim2.new(1, -12, 0, 20)
+        title.Position = UDim2.fromOffset(6, 3)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 12
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Text = "PERFORMANCE"
+        title.Parent = frame
+
+        local info = Instance.new("TextLabel")
+        info.BackgroundTransparency = 1
+        info.Size = UDim2.new(1, -12, 0, 34)
+        info.Position = UDim2.fromOffset(6, 24)
+        info.Font = Enum.Font.GothamMedium
+        info.TextSize = 12
+        info.TextXAlignment = Enum.TextXAlignment.Left
+        info.TextYAlignment = Enum.TextYAlignment.Center
+        info.Text = "FPS: --   |   Ping: --\nPlayers: --"
+        info.Parent = frame
+
+        local dragging, dragStart, startPos
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        UIS.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+
+        local frames, last = 0, os.clock()
+        local conn = RunService.RenderStepped:Connect(function()
+            frames += 1
+            local now = os.clock()
+            local elapsed = now - last
+            if elapsed < 0.5 then return end
+            local fps = math.floor(frames / elapsed + 0.5)
+            frames, last = 0, now
+            local ping = "--"
+            pcall(function()
+                local network = Stats:FindFirstChild("Network")
+                local server = network and network:FindFirstChild("ServerStatsItem")
+                local dp = server and server:FindFirstChild("Data Ping")
+                if dp then ping = tostring(math.floor(dp:GetValue() + 0.5)) .. " ms" end
+            end)
+            info.Text = ("FPS: %d   |   Ping: %s\nPlayers: %d"):format(fps, ping, #Players:GetPlayers())
+        end)
+
+        task.spawn(function()
+            while gui.Parent do task.wait(1) end
+            if conn then conn:Disconnect() end
+        end)
+    end)
+end
 local Watermark  = Window:Watermark("Kn v1.0.0 PREMIUM")
 local KeybindList= Window:KeybindList()
 
@@ -8764,6 +8944,242 @@ local SoundCat   = MiscPage
 local DetectCat  = MiscPage
 local ConfigCat  = MiscPage
 local HitLogCat  = MiscPage
+
+
+
+-- Enhanced window animation helper. Existing Window:SetOpen remains authoritative;
+-- this helper can be called by the external toggle or future UI controls.
+local function KN_AnimateWindow(opened)
+    local main = Items and Items["MainFrame"] and Items["MainFrame"].Instance
+    if not main then return end
+    local scale = main:FindFirstChild("OpenAnimationScale")
+    local pos = main
+    local targetScale = opened and 1 or 0.94
+    if scale then
+        KN_Tween(scale, TweenInfo.new(opened and 0.42 or 0.30, Enum.EasingStyle.Quint,
+            opened and Enum.EasingDirection.Out or Enum.EasingDirection.In), {Scale = targetScale})
+    end
+end
+
+
+-- ============================================================
+-- KN TEST 11 - CHARACTER PARTICLE CONTROL
+-- ============================================================
+local KN_ParticleDefaultOff = true
+local KN_ParticleConnections = {}
+
+local function KN_SetCharacterParticles(character, enabled)
+    if not character then return end
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+            pcall(function()
+                if enabled then
+                    local old = obj:GetAttribute("KN_OriginalEnabled")
+                    if old ~= nil then obj.Enabled = old else obj.Enabled = true end
+                else
+                    if obj:GetAttribute("KN_OriginalEnabled") == nil then
+                        obj:SetAttribute("KN_OriginalEnabled", obj.Enabled)
+                    end
+                    obj.Enabled = false
+                end
+            end)
+        end
+    end
+end
+
+local function KN_ApplyParticleDefault(character)
+    if KN_ParticleDefaultOff then
+        KN_SetCharacterParticles(character, false)
+    end
+end
+
+local function KN_WatchCharacter(character)
+    KN_ApplyParticleDefault(character)
+    local conn = character.DescendantAdded:Connect(function(obj)
+        if KN_ParticleDefaultOff and
+           (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam")) then
+            task.defer(function()
+                if obj.Parent then
+                    if obj:GetAttribute("KN_OriginalEnabled") == nil then
+                        obj:SetAttribute("KN_OriginalEnabled", obj.Enabled)
+                    end
+                    obj.Enabled = false
+                end
+            end)
+        end
+    end)
+    table.insert(KN_ParticleConnections, conn)
+end
+
+pcall(function()
+    local lp = Players.LocalPlayer
+    if lp.Character then KN_WatchCharacter(lp.Character) end
+    table.insert(KN_ParticleConnections, lp.CharacterAdded:Connect(KN_WatchCharacter))
+end)
+
+
+-- ============================================================
+-- KN TEST 10 - POLISHED CONTROLS
+-- ============================================================
+local KN_Test10Page
+pcall(function()
+    KN_Test10Page = Library:CreatePage({Name = "Polished"})
+end)
+
+if KN_Test10Page then
+    local KN_UISection = KN_Test10Page:Section({Name = "Window / UI", Side = 1})
+
+    KN_UISection:Toggle({
+        Name = "Compact Mode",
+        Flag = "kn_compact_mode",
+        Default = false,
+        Callback = function(v)
+            local main = Items and Items["MainFrame"] and Items["MainFrame"].Instance
+            if not main then return end
+            local scale = main:FindFirstChild("MobileScale") or main:FindFirstChildOfClass("UIScale")
+            if scale then
+                KN_Tween(scale, TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                    Scale = v and 0.88 or 1
+                })
+            end
+        end
+    })
+
+    KN_UISection:Toggle({
+        Name = "Smooth Window Animations",
+        Flag = "kn_smooth_window",
+        Default = true,
+        Callback = function(v)
+            getgenv().KN_SmoothWindow = v == true
+        end
+    })
+
+    
+    local KN_ParticleSection = KN_Test10Page:Section({Name = "Character Effects", Side = 2})
+    KN_ParticleSection:Toggle({
+        Name = "Disable Character Particles",
+        Flag = "kn_disable_character_particles",
+        Default = true,
+        Callback = function(v)
+            KN_ParticleDefaultOff = v == true
+            local lp = Players.LocalPlayer
+            if lp and lp.Character then
+                KN_SetCharacterParticles(lp.Character, not KN_ParticleDefaultOff)
+            end
+        end
+    })
+
+local KN_VisualSection = KN_Test10Page:Section({Name = "Visual Presets", Side = 1})
+    KN_VisualSection:Dropdown({
+        Name = "Visual Preset",
+        Flag = "kn_visual_preset",
+        Values = {"Default", "Realistic", "Competitive", "Cinematic", "Performance"},
+        Default = "Default",
+        Callback = function(v)
+            local preset = tostring(v)
+            if preset == "Performance" then
+                KN_SafeCall(function()
+                    if Library.Flags.disable_post_effects == false then
+                        Library.Flags.disable_post_effects = true
+                    end
+                end)
+            elseif preset == "Default" then
+                -- Leave user-controlled graphics untouched.
+            end
+        end
+    })
+
+    local KN_PerfSection = KN_Test10Page:Section({Name = "Performance Monitor", Side = 2})
+    local KN_PerfLabel = KN_PerfSection:Label({Name = "FPS: --  |  Ping: --  |  Players: --"})
+    local KN_PerfRunning = true
+
+    KNStateManager:Connect(RunService.RenderStepped, function()
+        if not KN_PerfRunning or not KN_PerfLabel or not KN_PerfLabel.Instance then return end
+        if not KN_PerfLabel.Instance.Parent then return end
+        local now = os.clock()
+        local frameDt = now - (getgenv().KN_LastFrameTick or now)
+        getgenv().KN_LastFrameTick = now
+        local dt = now - (getgenv().KN_LastPerfTick or now)
+        if dt < 0.5 then return end
+        getgenv().KN_LastPerfTick = now
+
+        local fps = frameDt > 0 and math.floor(1 / math.max(frameDt, 0.001) + 0.5) or 0
+        local players = #Players:GetPlayers()
+        local ping = "--"
+        pcall(function()
+            local stats = game:GetService("Stats")
+            local network = stats:FindFirstChild("Network")
+            local serverStats = network and network:FindFirstChild("ServerStatsItem")
+            local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+            if dataPing then
+                ping = tostring(math.floor(dataPing:GetValue() + 0.5)) .. " ms"
+            end
+        end)
+        pcall(function()
+            KN_PerfLabel.Instance.Text = ("FPS: %d | Ping: %s | Players: %d"):format(fps, ping, players)
+        end)
+    end)
+
+    local KN_PerfControls = KN_PerfSection:Toggle({
+        Name = "Performance Monitor",
+        Flag = "kn_perf_monitor",
+        Default = true,
+        Callback = function(v)
+            KN_PerfRunning = v == true
+        end
+    })
+
+    
+    local KN_UXSection = KN_Test10Page:Section({Name = "Interface", Side = 1})
+    KN_UXSection:Slider({
+        Name = "UI Scale",
+        Flag = "kn_ui_scale",
+        Min = 80,
+        Max = 110,
+        Increment = 5,
+        Default = 100,
+        Callback = function(v)
+            local main = Items and Items["MainFrame"] and Items["MainFrame"].Instance
+            if not main then return end
+            local scale = main:FindFirstChild("MobileScale") or main:FindFirstChildOfClass("UIScale")
+            if scale then
+                KN_Tween(scale, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                    Scale = math.clamp(v / 100, 0.8, 1.1)
+                })
+            end
+        end
+    })
+    KN_UXSection:Toggle({
+        Name = "Reduced Motion",
+        Flag = "kn_reduced_motion",
+        Default = false,
+        Callback = function(v)
+            getgenv().KN_ReducedMotion = v == true
+        end
+    })
+
+local KN_ThemeSection = KN_Test10Page:Section({Name = "Theme", Side = 2})
+    KN_ThemeSection:Colorpicker({
+        Name = "Accent",
+        Flag = "kn_accent",
+        Default = Color3.fromRGB(145, 85, 255),
+        Callback = function(c)
+            getgenv().KN_Accent = c
+        end
+    })
+
+    local KN_LogsSection = KN_Test10Page:Section({Name = "Error Protection", Side = 2})
+    KN_LogsSection:Toggle({
+        Name = "Safe Callbacks",
+        Flag = "kn_safe_callbacks",
+        Default = true,
+        Callback = function(v)
+            getgenv().KN_SafeCallbacks = v == true
+        end
+    })
+    KN_LogsSection:Label({Name = "Protected callbacks prevent one error from breaking the UI."})
+end
+
 
 local SettingsPage = Library:CreateSettingsPage(Window, KeybindList, Watermark)
 
@@ -8878,7 +9294,7 @@ do
     OptTools:Toggle({
         Name = "Disable Post Effects",
         Flag = "opt_postfx",
-        Default = false,
+        Default = true,
         Callback = function(v)
             local lighting = game:GetService("Lighting")
             for _, obj in ipairs(lighting:GetChildren()) do
@@ -9215,6 +9631,8 @@ do
     TargetHealthText.TextColor3 = Color3.fromRGB(140,150,165)
     TargetHealthText.Text = "100/100"
     TargetHealthText.Parent = TargetInfo
+
+    Library:RegisterWindowPosition("TargetInfo", TargetInfo)
 
     -- Mobile-friendly dragging; disabled while Fixed is enabled.
     local dragging = false
@@ -9987,6 +10405,8 @@ do
         end)
     end
 
+    Library:RegisterWindowPosition("BossChecklist", boss_panel)
+
     local function findBoss(name)
         local found = false
         local displayName = BossDisplay[name] or name
@@ -10343,6 +10763,8 @@ do
     GridContainer.ScrollBarImageColor3=Color3.fromRGB(50,50,50); GridContainer.BorderSizePixel=0
     local GridLayout=Instance.new("UIGridLayout", GridContainer)
     GridLayout.CellSize=UDim2.new(0,88,0,88); GridLayout.CellPadding=UDim2.new(0,8,0,8); GridLayout.SortOrder=Enum.SortOrder.LayoutOrder
+    Library:RegisterWindowPosition("Inventory", MainFrame)
+
     local inv_Dragging = false; local inv_StartPos, inv_StartMouse
     HeaderBg.InputBegan:Connect(function(input)
         if not Library.Flags.inv_drag then return end
@@ -10578,7 +11000,37 @@ do
 
     WL:Toggle({ Name="Time Changer",  Flag="w_timeon",    Callback=function(v) world_globals.EnableTime=v; globals.EnableTime=v; if not v then Lighting.ClockTime=original_clock_time end end })
     WL:Slider({ Name="Time",          Flag="w_time",      Min=0,Max=240,Increment=1, Callback=function(v) world_globals.Time=v/10; globals.Time=v/10 end })
-    WL:Toggle({ Name="Ambient",       Flag="w_ambient",   Callback=function(v) world_globals.gradientenabled=v; globals.gradientenabled=v; if not v then Lighting.Ambient=original_ambient; Lighting.OutdoorAmbient=original_outdoor end end }):Colorpicker({ Flag="w_ambcol1",   Default=Color3.new(1,1,1), Alpha=0, Callback=function(v) grad_col1=v; grad_col2=v end })
+    local _ambient_toggle_busy = false
+    local function setAmbientEnabled(enabled)
+        world_globals.gradientenabled = enabled
+        globals.gradientenabled = enabled
+        if enabled then
+            _lg_amb = nil
+            _lg_outamb = nil
+            Lighting.Ambient = grad_col1
+            Lighting.OutdoorAmbient = grad_col2
+            _lg_amb = grad_col1
+            _lg_outamb = grad_col2
+        else
+            Lighting.Ambient = original_ambient
+            Lighting.OutdoorAmbient = original_outdoor
+            _lg_amb = nil
+            _lg_outamb = nil
+        end
+    end
+
+    WL:Toggle({ Name="Ambient",       Flag="w_ambient",   Default=false, Callback=function(v) setAmbientEnabled(v) end }):Colorpicker({ Flag="w_ambcol1",   Default=Color3.new(1,1,1), Alpha=0, Callback=function(v)
+        grad_col1 = v
+        grad_col2 = v
+        if Library.Flags.w_ambient then
+            _lg_amb = nil
+            _lg_outamb = nil
+            Lighting.Ambient = grad_col1
+            Lighting.OutdoorAmbient = grad_col2
+            _lg_amb = grad_col1
+            _lg_outamb = grad_col2
+        end
+    end })
     WL:Toggle({ Name="No Fog",        Flag="w_nofog",     Callback=function(v) if not v then Lighting.FogEnd = original_fog_end end end })
     WL:Toggle({ Name="No Grass",      Flag="w_nograss",   Callback=function(v) pcall(function() sethiddenproperty(workspace:FindFirstChildOfClass("Terrain"),"Decoration",not v) end) end })
     local _noclouds_orig = nil
@@ -10636,6 +11088,10 @@ do
     end)
 
     local _lg_amb, _lg_outamb, _lg_time
+
+    -- Ambient: force a fresh application every time the toggle is re-enabled.
+    -- The previous version kept the cached colors after disabling, so the
+    -- heartbeat considered them already applied and skipped the second activation.
     cheat.utility.new_heartbeat(function()
         local _sky = Library.Flags.w_skybox
         if _sky and _sky ~= "None" and _sky ~= _last_skybox then _last_skybox = _sky; applySkybox(_sky) end
@@ -11838,6 +12294,8 @@ do
             kdr, kills, deaths, h, m, sec, reports or 0
         )
     end
+
+    Library:RegisterWindowPosition("Profile", profile_frame)
 
     do
         local dragging, drag_start, start_pos = false, nil, nil
