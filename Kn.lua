@@ -7117,9 +7117,11 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
             cham.OutlineColor = settings.chamsoutline_color[1]
             cham.OutlineTransparency = settings.chams_outline and settings.chamsoutline_color[2] or 1
             outline.Adornee = character
+            -- ESP Outline is a silhouette-style Highlight: fully transparent fill,
+            -- crisp outline, and AlwaysOnTop so it remains useful through geometry.
             outline.FillTransparency = 1
-            outline.OutlineTransparency = settings.outline and settings.outline_color[2] or 1
-            outline.DepthMode = settings.outline_visible_check and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
+            outline.OutlineTransparency = settings.outline and math.clamp(settings.outline_color[2] or 0, 0, 1) or 1
+            outline.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             realname.Size = main_settings.textSize
             realname.Font = main_settings.textFont
             realname.Outline = settings.dist_outline
@@ -7262,7 +7264,13 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 return plr:togglevis(false)
             end
             local humanoid_distance = (camera.CFrame.p - head.Position).Magnitude
-            if main_settings.distancelimit and not main_settings.infiniterange and humanoid_distance > main_settings.maxdistance then
+            -- Read the slider every frame so changing/toggling ESP cannot leave a stale
+            -- 500 m limit on already-created ESP objects. Roblox uses studs here; the UI
+            -- displays meters at roughly 3 studs per meter for this game.
+            local configured_meters = tonumber(Library.Flags and Library.Flags.esp_distance) or (main_settings.maxdistance / 3)
+            local effective_maxdistance = main_settings.infiniterange and math.huge or math.max(50, configured_meters * 3)
+            main_settings.maxdistance = effective_maxdistance
+            if main_settings.distancelimit and not main_settings.infiniterange and humanoid_distance > effective_maxdistance then
                 return plr:togglevis(false)
             end
             local humanoid_health = humanoid.Health
@@ -7335,7 +7343,7 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
                 local _cl = os.clock()
                 if not plr._gun_cache_time or (_cl - plr._gun_cache_time) > 0.5 then
                     plr._gun_cache_time = _cl
-                    plr._gun_cache_text = isnpc and "" or esp_table.get_gun(player)
+                    plr._gun_cache_text = esp_table.get_gun(player)
                 end
                 weapon.Text = plr._gun_cache_text or ""
                 weapon.Position = pos + Vector2.yAxis * (dist.TextBounds.Y + 10)
@@ -7609,6 +7617,9 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
         if loaded_plrs[player].chams_object then
             loaded_plrs[player].chams_object:Destroy()
         end
+        if loaded_plrs[player].outline_object then
+            loaded_plrs[player].outline_object:Destroy()
+        end
         loaded_plrs[player] = nil
     end
     function esp_table.load()
@@ -7654,7 +7665,34 @@ cheat.EspLibrary = {} LPH_NO_VIRTUALIZE(function()
         end
         esp_table.__loaded = false;
     end
+    local function get_model_weapon(model)
+        if not model or not model:IsA("Model") then return "None" end
+
+        -- NPCs do not have a ReplicatedStorage.Players entry like real players.
+        -- Resolve the weapon from common ObjectValue/StringValue/attributes first.
+        local attr_names = {"EquippedWeapon", "WeaponName", "CurrentWeapon", "Weapon", "Gun", "EquippedGun"}
+        for _, name in ipairs(attr_names) do
+            local value = model:GetAttribute(name)
+            if value ~= nil and tostring(value) ~= "" then
+                return tostring(value)
+            end
+        end
+        for _, d in ipairs(model:GetDescendants()) do
+            if d:IsA("ObjectValue") and (d.Name == "EquippedTool" or d.Name == "Holding" or d.Name == "EquippedWeapon" or d.Name == "Weapon") then
+                if d.Value then return d.Value.Name end
+            elseif (d:IsA("StringValue") or d:IsA("IntValue")) and (d.Name == "WeaponName" or d.Name == "CurrentWeapon" or d.Name == "EquippedWeapon") then
+                if tostring(d.Value) ~= "" then return tostring(d.Value) end
+            elseif d:IsA("Tool") then
+                return d.Name
+            end
+        end
+        return "None"
+    end
+
     function esp_table.get_gun(player)
+        if typeof(player) == "Instance" and player:IsA("Model") then
+            return get_model_weapon(player)
+        end
         local Player = _FindFirstChild(ReplicatedStorage.Players, player.Name);
         if Player and _FindFirstChild(Player, "Status") and _FindFirstChild(Player.Status, "GameplayVariables") and _FindFirstChild(Player.Status.GameplayVariables, "EquippedTool") and Player.Status.GameplayVariables.EquippedTool.Value then
             local Equipped = Player.Status.GameplayVariables.EquippedTool.Value;
@@ -7970,6 +8008,11 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
     manip_origin = manip_origin ~= nil and manip_origin or silent_aim.manipulated_origin
 
     local ermm_part, isnpc = nil, false
+    local local_char = LocalPlayer.Character
+    local local_root = local_char and local_char:FindFirstChild("HumanoidRootPart")
+    local distance_origin = local_root and local_root.Position or Camera.CFrame.Position
+    local best_world_distance = math.huge
+    local best_screen_distance = math.huge
     -- Silent Aim target selection is always bounded by the same FOV radius
     -- used by the rendered circle. The FOV toggle controls visualization, not
     -- the actual safety boundary of target selection.
@@ -8017,18 +8060,24 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                             if (Camera.CFrame.p-part.Position).Magnitude < 2500 then
                                 local position, onscreen = Camera:WorldToViewportPoint(part.Position)
                                 local distance = (Vector2.new(position.X,position.Y)-mousepos).Magnitude
-                                local world_distance = (Camera.CFrame.Position-part.Position).Magnitude
+                                local world_distance = (distance_origin-part.Position).Magnitude
                                 if is_inside_fov(position, onscreen) and distance <= maximum_distance then
                                     if silent_aim.visible_only then
                                         if is_visible_fn(Camera.CFrame, npcs, part) then
-                                            ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
+                                            if world_distance < best_world_distance or (world_distance == best_world_distance and distance < best_screen_distance) then
+                                                ermm_part = part; best_world_distance = world_distance; best_screen_distance = distance; isnpc = true
+                                            end
                                         end
                                     elseif require_triggerable then
                                         if is_triggerable(npcs, part) then
-                                            ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
+                                            if world_distance < best_world_distance or (world_distance == best_world_distance and distance < best_screen_distance) then
+                                                ermm_part = part; best_world_distance = world_distance; best_screen_distance = distance; isnpc = true
+                                            end
                                         end
                                     else
-                                        ermm_part = part; maximum_distance = distance; best_world_distance = world_distance; isnpc = true
+                                        if world_distance < best_world_distance or (world_distance == best_world_distance and distance < best_screen_distance) then
+                                        ermm_part = part; best_world_distance = world_distance; best_screen_distance = distance; isnpc = true
+                                    end
                                     end
                                 end
                             end
@@ -8037,8 +8086,7 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                 end
             end
         end
-        local best_world_distance = math.huge
-        for _, plr in Players:GetPlayers() do
+            for _, plr in Players:GetPlayers() do
             local character = plr.Character
             if plr~=LocalPlayer and character and not silent_aim_is_whitelisted(plr) then
                 local part = character:FindFirstChild(aimpart)
@@ -8047,7 +8095,7 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                 if part and humanoid and humanoid.Health>0 and root then
                     local position, onscreen = Camera:WorldToViewportPoint(part.Position)
                     local screen_distance = (Vector2.new(position.X,position.Y)-mousepos).Magnitude
-                    local world_distance = (Camera.CFrame.Position-root.Position).Magnitude
+                    local world_distance = (distance_origin-root.Position).Magnitude
                     if is_inside_fov(position, onscreen) then
                         local can_use = true
                         if silent_aim.visible_only then
@@ -8060,8 +8108,9 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                         if can_use then
                             -- With Visible Only enabled, choose the closest visible target in the FOV.
                             -- With it disabled, choose the nearest target in 3D distance.
-                            if world_distance < best_world_distance then
+                            if world_distance < best_world_distance or (world_distance == best_world_distance and screen_distance < best_screen_distance) then
                                 best_world_distance = world_distance
+                                best_screen_distance = screen_distance
                                 ermm_part=part; isnpc=false
                             end
                         end
@@ -8727,6 +8776,25 @@ do
 
     local saved = {}
     local optimizationConnections = {}
+
+    -- Startup graphics safety: this script must not leave the game in a blurred/disabled
+    -- post-processing state. Explicit optimization toggles can still change it later.
+    task.defer(function()
+        task.wait(0.75)
+        pcall(function()
+            for _, obj in ipairs(game:GetService("Lighting"):GetChildren()) do
+                if obj:IsA("PostEffect") and not Library.Flags.opt_postfx and not Library.Flags.opt_low_graphics then
+                    obj.Enabled = true
+                end
+            end
+        end)
+        pcall(function()
+            local pg = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            local ni = pg and pg:FindFirstChild("NoInsetGui")
+            local se = ni and ni:FindFirstChild("MainFrame") and ni.MainFrame:FindFirstChild("ScreenEffects")
+            if se and not Library.Flags.ov_noscreenfx then se.Visible = true end
+        end)
+    end)
 
     local function save_prop(obj, prop)
         saved[obj] = saved[obj] or {}
@@ -9745,7 +9813,7 @@ do
     end)
 
     RunService:BindToRenderStep("TPKillAutoLook",201,function()
-        if tpkill_enabled and tpkill_autolook and current_tp_target and current_tp_target.Parent then
+        if tpkill_enabled and tpkill_autolook and not cheat.freecam_enabled and current_tp_target and current_tp_target.Parent then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, current_tp_target.Position)
         end
     end)
@@ -9774,7 +9842,7 @@ do
         cheat.EspLibrary.main_settings.infiniterange = v
         if v then
             -- Infinite Range uses a large internal distance while keeping the UI slider capped at 1000m.
-            cheat.EspLibrary.main_settings.maxdistance = 30000 * 3
+            cheat.EspLibrary.main_settings.maxdistance = math.huge
             cheat.EspLibrary.main_settings.distancelimit = true
         else
             local slider_value = tonumber(Library.Flags.esp_distance) or 400
@@ -9970,16 +10038,15 @@ do
         end
     end
 
-    -- A 400 HP NPC is also treated as a boss by the scanner's health rule.
+    -- Boss status is per-name only. Never infer a boss from generic HP values,
+    -- otherwise one 400-HP NPC can incorrectly mark every boss as alive.
     local oldFindBoss = findBoss
     findBoss = function(name)
         for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Model") then
+            if obj:IsA("Model") and string.lower(obj.Name) == string.lower(name) then
                 local hum = obj:FindFirstChildOfClass("Humanoid")
                 local hp = hum and hum.Health or tonumber(obj:GetAttribute("Health"))
-                if string.lower(obj.Name) == string.lower(name) or (hp and math.floor(hp + 0.5) == 400) then
-                    if hp == nil or hp > 0 then return true end
-                end
+                if hp == nil or tonumber(hp) > 0 then return true end
             end
         end
         return false
@@ -11204,20 +11271,24 @@ do
 
     local freecam_speed = 50
     local fc_pos, fc_pitch, fc_yaw = nil, 0, 0
+    local fc_old_subject, fc_old_type = nil, nil
 
     FCL:Toggle({ Name="Freecam", Flag="fc_on", Callback=function(v)
         cheat.freecam_enabled = v
         if v then
+            fc_old_type = Camera.CameraType
+            fc_old_subject = Camera.CameraSubject
             Camera.CameraType = Enum.CameraType.Scriptable
             fc_pos = Camera.CFrame.Position
             fc_pitch, fc_yaw = Camera.CFrame:ToOrientation()
         else
-            Camera.CameraType = Enum.CameraType.Custom
             UserInputService.MouseBehavior = Enum.MouseBehavior.Default
             fc_pos = nil
             local char = Players.LocalPlayer.Character
-            local hrp = char and _FindFirstChild(char, "HumanoidRootPart")
-            if hrp then hrp.Anchored = false end
+            local hum = char and _FindFirstChildOfClass(char, "Humanoid")
+            Camera.CameraType = fc_old_type or Enum.CameraType.Custom
+            Camera.CameraSubject = fc_old_subject or hum
+            fc_old_type, fc_old_subject = nil, nil
         end
     end }):Keybind({ Flag="fc_key", Mode="Toggle", Callback=function(v) if Library.SetFlags["fc_on"] then Library.SetFlags["fc_on"](v) end end })
     FCL:Slider({ Name="Speed", Flag="fc_speed", Min=10, Max=575, Increment=1, Default=50, Callback=function(v) freecam_speed=v end })
@@ -11277,7 +11348,9 @@ do
         fc_pos = fc_pos + direction * delta * speed
 
         Camera.CFrame = CFrame.new(fc_pos) * rot
-        if hrp then hrp.Anchored = true end
+        -- Do not anchor the character: anchoring was causing the normal character
+        -- camera/controller to lose state when Freecam was toggled off.
+        if hrp then hrp.Anchored = false end
     end))
 end
 
