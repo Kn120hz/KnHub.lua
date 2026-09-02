@@ -54,9 +54,6 @@ local Library do
 
         OpenFrames = { },
 
-        -- Persistent positions for draggable/floating windows.
-        WindowPositions = { },
-
         SetFlags = { },
 
         UnnamedConnections = 0,
@@ -1389,58 +1386,6 @@ Library.AddToTheme = function(self, Item, Properties)
     self.ThemeMap[Item] = ThemeData
 end
 
-# ============================================================
--- Persistent window positions
--- ============================================================
-Library.RegisterWindowPosition = function(self, Name, Gui)
-    if not Name or not Gui then return end
-    local Instance = Gui.Instance or Gui
-    if not Instance then return end
-    self.WindowPositions[tostring(Name)] = Instance
-end
-
-Library.CaptureWindowPositions = function(self)
-    local Positions = { }
-    for Name, Gui in pairs(self.WindowPositions) do
-        local Instance = Gui and (Gui.Instance or Gui)
-        if Instance and Instance.Parent then
-            local Pos = Instance.Position
-            Positions[Name] = {
-                XScale = tonumber(Pos.X.Scale) or 0,
-                XOffset = tonumber(Pos.X.Offset) or 0,
-                YScale = tonumber(Pos.Y.Scale) or 0,
-                YOffset = tonumber(Pos.Y.Offset) or 0,
-            }
-            if Name == "Inventory" then
-                self.Flags.inv_x = Positions[Name].XOffset
-                self.Flags.inv_y = Positions[Name].YOffset
-            end
-        end
-    end
-    return Positions
-end
-
-Library.ApplyWindowPositions = function(self, Positions)
-    if type(Positions) ~= "table" then return end
-    task.defer(function()
-        for Name, Data in pairs(Positions) do
-            local Gui = self.WindowPositions[tostring(Name)]
-            local Instance = Gui and (Gui.Instance or Gui)
-            if Instance and Instance.Parent and type(Data) == "table" then
-                local xs = tonumber(Data.XScale) or 0
-                local xo = tonumber(Data.XOffset) or 0
-                local ys = tonumber(Data.YScale) or 0
-                local yo = tonumber(Data.YOffset) or 0
-                Instance.Position = UDim2.new(xs, xo, ys, yo)
-                if Name == "Inventory" then
-                    self.Flags.inv_x = xo
-                    self.Flags.inv_y = yo
-                end
-            end
-        end
-    end)
-end
-
 Library.GetConfig = function(self)
     local Config = { } 
 
@@ -1456,8 +1401,6 @@ Library.GetConfig = function(self)
         end
     end)
 
-    Config.__KnWindowPositions = Library:CaptureWindowPositions()
-
     return HttpService:JSONEncode(Config)
 end
 
@@ -1466,10 +1409,6 @@ Library.LoadConfig = function(self, Config)
 
     local Success, Result = Library:SafeCall(function()
         for Index, Value in Decoded do 
-            if Index == "__KnWindowPositions" then
-                continue
-            end
-
             local SetFunction = Library.SetFlags[Index]
 
             if not SetFunction then
@@ -1484,8 +1423,6 @@ Library.LoadConfig = function(self, Config)
                 SetFunction(Value)
             end
         end
-
-        Library:ApplyWindowPositions(Decoded.__KnWindowPositions)
     end)
 
     return Success, Result
@@ -3020,7 +2957,6 @@ do
         Watermark:SetText(Name)
         Watermark.Frame = Items["Watermark"].Instance
         Items["Watermark"]:MakeDraggable()
-        Library:RegisterWindowPosition("Watermark", Items["Watermark"])
 
         return Watermark
     end
@@ -3181,7 +3117,6 @@ do
 
         KeybindList.Frame = Items["KeybindList"].Instance
         Items["KeybindList"]:MakeDraggable()
-        Library:RegisterWindowPosition("KeybindList", Items["KeybindList"])
 
         return KeybindList
     end
@@ -3204,7 +3139,6 @@ do
             })  Items["ModList"]:AddToTheme({BackgroundColor3 = "Background 2"})
 
             Items["ModList"]:MakeDraggable()
-            Library:RegisterWindowPosition("ModList", Items["ModList"])
 
             Instances:Create("UIPadding", {
                 Parent = Items["ModList"].Instance,
@@ -3457,7 +3391,6 @@ do
             })  Items["ArmorViewer"]:AddToTheme({BackgroundColor3 = "Background 2"})
 
             Items["ArmorViewer"]:MakeDraggable()
-            Library:RegisterWindowPosition("ArmorViewer", Items["ArmorViewer"])
 
             Items["Liner"] = Instances:Create("Frame", {
                 Parent = Items["ArmorViewer"].Instance,
@@ -3770,7 +3703,6 @@ do
             })  Items["TargetHud"]:AddToTheme({BackgroundColor3 = "Background 1"})
 
             Items["TargetHud"]:MakeDraggable()
-            Library:RegisterWindowPosition("TargetHud", Items["TargetHud"])
             
             Instances:Create("UIStroke", {
                 Parent = Items["TargetHud"].Instance,
@@ -4089,7 +4021,6 @@ do
             })
 
             Items["MainFrame"]:MakeDraggable(Items["DragHandle"])
-            Library:RegisterWindowPosition("MainWindow", Items["MainFrame"])
             Items["MainFrame"]:MakeResizeable(Vector2New(621, 542), Vector2New(9999, 9999))
             
             Items["UIStroke"] = Instances:Create("UIStroke", {
@@ -4351,8 +4282,6 @@ do
             ZIndex = 10001
         })
         Items["ExternalToggleIcon"]:AddToTheme({TextColor3 = "Text"})
-
-        Library:RegisterWindowPosition("ExternalToggle", Items["ExternalToggle"])
 
         Instances:Create("UICorner", {
             Parent = Items["ExternalToggle"].Instance,
@@ -6588,7 +6517,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                         if not isfile(path) then
                             writefile(path, Library:GetConfig())
                             Library:RefreshConfigsList(ConfigsSearchbox)
-                            Library:Notification("Created config " .. ConfigName .. ".json (with window positions)", 5)
+                            Library:Notification("Created config " .. ConfigName .. ".json", 5)
                         else
                             Library:Notification("Config already exists. Use Overwrite.", 5)
                         end
@@ -6648,7 +6577,7 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
                 Callback = function()
                     if ConfigSelected ~= nil then
                         writefile(Library.Folders.Configs .. "/" .. ConfigSelected .. ".json", Library:GetConfig())
-                        Library:Notification("Overwrote config " .. ConfigSelected .. ".json (with window positions)", 5)
+                        Library:Notification("Overwrote config " .. ConfigSelected .. ".json", 5)
                     end
                 end
             })
@@ -8814,7 +8743,7 @@ local logoAsset = isfile("tomboy.hook/Assets/logo.png") and getcustomasset("tomb
 local Window     = Library:Window({ Name = "Kn v1.0.0 PREMIUM", Logo = logoAsset or "" })
 
 -- ============================================================
--- KN PERFORMANCE HUD - ALWAYS VISIBLE + SAVED POSITION
+-- KN PERFORMANCE HUD - ALWAYS VISIBLE
 -- ============================================================
 do
     local ok, err = pcall(function()
@@ -8842,7 +8771,6 @@ do
         frame.BackgroundTransparency = 0.18
         frame.BorderSizePixel = 0
         frame.Parent = gui
-        Library:RegisterWindowPosition("PerformanceHUD", frame)
 
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 8)
@@ -9632,8 +9560,6 @@ do
     TargetHealthText.Text = "100/100"
     TargetHealthText.Parent = TargetInfo
 
-    Library:RegisterWindowPosition("TargetInfo", TargetInfo)
-
     -- Mobile-friendly dragging; disabled while Fixed is enabled.
     local dragging = false
     local dragStart = nil
@@ -10405,8 +10331,6 @@ do
         end)
     end
 
-    Library:RegisterWindowPosition("BossChecklist", boss_panel)
-
     local function findBoss(name)
         local found = false
         local displayName = BossDisplay[name] or name
@@ -10763,8 +10687,6 @@ do
     GridContainer.ScrollBarImageColor3=Color3.fromRGB(50,50,50); GridContainer.BorderSizePixel=0
     local GridLayout=Instance.new("UIGridLayout", GridContainer)
     GridLayout.CellSize=UDim2.new(0,88,0,88); GridLayout.CellPadding=UDim2.new(0,8,0,8); GridLayout.SortOrder=Enum.SortOrder.LayoutOrder
-    Library:RegisterWindowPosition("Inventory", MainFrame)
-
     local inv_Dragging = false; local inv_StartPos, inv_StartMouse
     HeaderBg.InputBegan:Connect(function(input)
         if not Library.Flags.inv_drag then return end
@@ -12294,8 +12216,6 @@ do
             kdr, kills, deaths, h, m, sec, reports or 0
         )
     end
-
-    Library:RegisterWindowPosition("Profile", profile_frame)
 
     do
         local dragging, drag_start, start_pos = false, nil, nil
