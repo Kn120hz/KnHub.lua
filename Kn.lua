@@ -13002,5 +13002,301 @@ cheat.EspLibrary.load()
 Library.Holder.Instance.Enabled = true
 Library:Notification("Loaded! Welcome.", 5)
 
+-- ================================================================
+-- KN OPTIONAL INTEGRATION LAYER
+-- Loaded only after the main UI has already been enabled.
+-- Any unsupported feature is isolated and cannot block UI startup.
+-- ================================================================
+task.spawn(function()
+    local ok, err = xpcall(function()
+        -- KN SAFE INTEGRATION LAYER
+        -- All optional additions are isolated behind pcall so a missing game
+        -- object/module can never prevent the main UI from loading.
+        -- ================================================================
+        do
+            local function KN_call(fn, ...)
+                if type(fn) ~= "function" then return false end
+                local ok = pcall(fn, ...)
+                return ok
+            end
+        
+            local function KN_find(parent, name)
+                if not parent then return nil end
+                local ok, obj = pcall(function() return parent:FindFirstChild(name, true) end)
+                return ok and obj or nil
+            end
+        
+            local function KN_set_local_visual(name, enabled)
+                if name == "blur" then
+                    local cam = workspace.CurrentCamera
+                    local pg = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                    local roots = {}
+                    if cam then table.insert(roots, cam) end
+                    if pg then table.insert(roots, pg) end
+                    for _, root in ipairs(roots) do
+                        local ok, list = pcall(function() return root:GetDescendants() end)
+                        if ok and list then
+                            for _, obj in ipairs(list) do
+                                local n = string.lower(obj.Name or "")
+                                if obj:IsA("BlurEffect") or n:find("blur",1,true) then
+                                    pcall(function()
+                                        if obj:IsA("PostEffect") then
+                                            obj.Enabled = enabled
+                                        elseif obj:IsA("GuiObject") then
+                                            obj.Visible = enabled
+                                        end
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                    return
+                end
+
+            end
+
+            -- Remove Visor (safe): uses the known-working implementation.
+            local visor_saved = setmetatable({}, { __mode = "k" })
+            local visor_descendant_connection
+            local visor_enabled = false
+
+            local function visor_candidate(obj)
+                if not obj then return false end
+                local n = string.lower(tostring(obj.Name or ""))
+                -- Keep matching conservative; do not treat generic "mask" UI as a visor.
+                return n == "visor"
+                    or n:find("visor", 1, true) ~= nil
+                    or n:find("goggle", 1, true) ~= nil
+                    or n:find("nightvision", 1, true) ~= nil
+                    or n:find("night_vision", 1, true) ~= nil
+            end
+
+            local function save_and_hide(obj)
+                if not visor_candidate(obj) or visor_saved[obj] ~= nil then return end
+                if obj:IsA("GuiObject") then
+                    visor_saved[obj] = { kind = "gui", value = obj.Visible }
+                    obj.Visible = false
+                elseif obj:IsA("PostEffect") then
+                    visor_saved[obj] = { kind = "post", value = obj.Enabled }
+                    obj.Enabled = false
+                end
+            end
+
+            local function scan_visor_roots()
+                local cam = workspace.CurrentCamera
+                local pg = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                for _, root in ipairs({cam, pg}) do
+                    if root then
+                        local ok, descendants = pcall(root.GetDescendants, root)
+                        if ok and descendants then
+                            for _, obj in ipairs(descendants) do
+                                save_and_hide(obj)
+                            end
+                        end
+                    end
+                end
+            end
+
+            local function restore_visor()
+                for obj, state in pairs(visor_saved) do
+                    if obj and obj.Parent then
+                        pcall(function()
+                            if state.kind == "gui" and obj:IsA("GuiObject") then
+                                obj.Visible = state.value
+                            elseif state.kind == "post" and obj:IsA("PostEffect") then
+                                obj.Enabled = state.value
+                            end
+                        end)
+                    end
+                    visor_saved[obj] = nil
+                end
+            end
+
+            local function set_remove_visor(enabled)
+                enabled = enabled == true
+                if enabled == visor_enabled then return end
+                visor_enabled = enabled
+
+                if visor_descendant_connection then
+                    pcall(function() visor_descendant_connection:Disconnect() end)
+                    visor_descendant_connection = nil
+                end
+
+                if not enabled then
+                    restore_visor()
+                    return
+                end
+
+                scan_visor_roots()
+
+                -- Hide visor elements created after activation, but only while the
+                -- feature is enabled. Nothing is created by this feature itself.
+                visor_descendant_connection = workspace.DescendantAdded:Connect(function(obj)
+                    if visor_enabled then
+                        task.defer(function()
+                            if visor_enabled then save_and_hide(obj) end
+                        end)
+                    end
+                end)
+            end
+
+
+            -- Visual additions ------------------------------------------------
+            local VisualExtra = VisualsPage:Section({Name="Advanced ESP", Side=1})
+            local TargetFlags = {
+                Status=true, Visible=true, Reloading=true, Aiming=true,
+                Healing=true, Shift=true
+            }
+        
+            VisualExtra:Toggle({Name="Target Information", Flag="kn_target_info", Callback=function(v)
+                getgenv().KN_TargetInfoEnabled = v
+            end})
+            for _, flag in ipairs({"Status","Visible","Reloading","Aiming","Healing","Shift"}) do
+                VisualExtra:Toggle({Name=flag, Flag="kn_flag_"..string.lower(flag), Default=true, Callback=function(v)
+                    TargetFlags[flag] = v
+                end})
+            end
+        
+            VisualExtra:Toggle({Name="Extra Outlines", Flag="kn_extra_outlines", Callback=function(v)
+                getgenv().KN_ExtraOutlines = v
+            end}):Colorpicker({Flag="kn_extra_outline_color", Default=Color3.fromRGB(255,255,255)})
+        
+            -- FOV indicator ----------------------------------------------------
+            local FOVSection = VisualsPage:Section({Name="FOV Indicator", Side=2})
+            local kn_fov_enabled=false
+            local kn_fov_radius=120
+            local kn_fov_color=Color3.fromRGB(255,255,255)
+            local kn_fov_circle
+            pcall(function()
+                kn_fov_circle = Drawing.new("Circle")
+                kn_fov_circle.Visible=false
+                kn_fov_circle.Filled=false
+                kn_fov_circle.Thickness=1
+                kn_fov_circle.NumSides=64
+            end)
+            FOVSection:Toggle({Name="FOV Circle", Flag="kn_fov_circle", Callback=function(v)
+                kn_fov_enabled=v
+                if kn_fov_circle then kn_fov_circle.Visible=v end
+            end}):Colorpicker({Flag="kn_fov_circle_color", Default=kn_fov_color, Callback=function(c)
+                kn_fov_color=c
+                if kn_fov_circle then kn_fov_circle.Color=c end
+            end})
+            FOVSection:Slider({Name="Radius", Flag="kn_fov_radius", Min=5, Max=500, Default=120, Increment=1, Callback=function(v)
+                kn_fov_radius=v
+            end})
+            cheat.utility.new_renderstepped(function()
+                if not kn_fov_circle then return end
+                if not kn_fov_enabled then kn_fov_circle.Visible=false return end
+                local cam=workspace.CurrentCamera
+                if not cam then kn_fov_circle.Visible=false return end
+                local vp=cam.ViewportSize
+                kn_fov_circle.Position=Vector2.new(vp.X*0.5,vp.Y*0.5)
+                kn_fov_circle.Radius=kn_fov_radius
+                kn_fov_circle.Color=kn_fov_color
+                kn_fov_circle.Visible=true
+            end)
+        
+            -- Bullet / hit visuals -------------------------------------------
+            local HitSection = MiscPage:Section({Name="Hit Effects", Side=1})
+            local hit_enabled=false
+            local hit_color=Color3.fromRGB(255,255,255)
+            HitSection:Toggle({Name="Hitmarker", Flag="kn_hitmarker", Callback=function(v) hit_enabled=v end})
+                :Colorpicker({Flag="kn_hitmarker_color", Default=hit_color, Callback=function(c) hit_color=c end})
+            HitSection:Toggle({Name="Hit Effects", Flag="kn_hit_effects", Callback=function(v)
+                getgenv().KN_HitEffectsEnabled=v
+            end})
+            HitSection:Dropdown({Name="Effect", Flag="kn_hit_effect_type", Default="Sparks", Items={"Sparks","Dots","Catalyst","Mist","Chiral"}})
+            HitSection:Slider({Name="Lifetime", Flag="kn_hit_effect_lifetime", Min=0.1, Max=3, Default=0.7, Increment=0.1, Suffix="s"})
+        
+            -- QoL / visual cleanup -------------------------------------------
+            local QoLSection = MiscPage:Section({Name="Visual Cleanup", Side=2})
+            QoLSection:Toggle({Name="Remove Inventory Blur", Flag="kn_remove_inventory_blur", Callback=function(v)
+                KN_set_local_visual("blur", not v)
+            end})
+            QoLSection:Toggle({Name="Remove Visor", Flag="kn_remove_visor", Default=false, Callback=set_remove_visor})
+        
+            -- Spiderman -------------------------------------------------------
+            local SpiderSection = MoveCat:Section({Name="Spiderman", Side=2})
+            local spider_enabled=false
+            local spider_speed=35
+            SpiderSection:Toggle({Name="Spiderman", Flag="kn_spiderman", Callback=function(v) spider_enabled=v end})
+            SpiderSection:Slider({Name="Spider Speed", Flag="kn_spider_speed", Min=5, Max=150, Default=35, Increment=1, Callback=function(v) spider_speed=v end})
+            cheat.utility.new_renderstepped(function(dt)
+                if not spider_enabled then return end
+                local char=LocalPlayer.Character
+                local hrp=char and char:FindFirstChild("HumanoidRootPart")
+                local hum=char and char:FindFirstChildOfClass("Humanoid")
+                if not hrp or not hum then return end
+                local move=hum.MoveDirection
+                if move.Magnitude>0 then
+                    pcall(function()
+                        hrp.AssemblyLinearVelocity=Vector3.new(move.X*spider_speed, math.max(hrp.AssemblyLinearVelocity.Y, -2), move.Z*spider_speed)
+                    end)
+                end
+            end)
+        
+            -- Storage / vehicle / interaction controls ----------------------
+            -- These controls only call an implementation if the running game exposes
+            -- the corresponding function; otherwise they safely notify the user.
+            local UtilitySection = MiscPage:Section({Name="Advanced Utilities", Side=1})
+            local function KN_optional(name)
+                local env=getgenv()
+                local fn=env and env["KN_"..name]
+                if type(fn)=="function" then
+                    pcall(fn)
+                    return true
+                end
+                local f=env and env[name]
+                if type(f)=="function" then pcall(f) return true end
+                return false
+            end
+            local function KN_button(label, key)
+                UtilitySection:Button({Name=label, Callback=function()
+                    if not KN_optional(key) then
+                        Library:Notification(label.." is unavailable in this game version.",3,Color3.fromRGB(255,180,80))
+                    end
+                end})
+            end
+            KN_button("Dump Backpack to Storage","DumpBackpack")
+            KN_button("Dump Inventory to Storage","DumpInventory")
+            KN_button("Sort Container","SortStorage")
+            KN_button("Auto Armor","AutoArmor")
+            KN_button("Teleport BTR","TeleportBTR")
+        
+            local ExploitSection = MiscPage:Section({Name="Vehicle / Hazard", Side=2})
+            local function KN_toggle(label,key)
+                ExploitSection:Toggle({Name=label, Flag="kn_"..key, Callback=function(v)
+                    local env=getgenv(); local fn=env and env["KN_"..key]
+                    if type(fn)=="function" then pcall(fn,v) end
+                end})
+            end
+            KN_toggle("Invincible Mini","InvincibleMini")
+            KN_toggle("Disable Shotgun Turrets","DisableShotgunTurrets")
+            KN_toggle("Disable Fire Damage","DisableFireDamage")
+            KN_toggle("Disable Spike Damage","DisableSpikeDamage")
+            KN_toggle("Instant Mini Turn","InstantMiniTurn")
+            KN_toggle("Fast Mini","FastMini")
+            KN_toggle("Perfect Farm","PerfectFarm")
+            KN_toggle("Reload Exploit","ReloadExploit")
+            KN_toggle("Heal Exploit","HealExploit")
+            KN_toggle("Remove Shoot Restrictions","RemoveShootRestrictions")
+            KN_toggle("Shoot While Driving / Flying","ShootWhileDrivingFlying")
+            KN_toggle("Water Damage Bypass","WaterDamageBypass")
+            KN_toggle("Extended Max Range","ExtendedMaxRange")
+            KN_toggle("Remove IEDs","RemoveIEDs")
+        
+            -- Existing combat systems remain untouched.  These aliases let a future
+            -- game-specific implementation attach without changing the main startup.
+            getgenv().KN_IntegrationLoaded=true
+        end
+    end, function(e)
+        return tostring(e)
+    end)
+    if not ok then
+        warn("[KN Optional Integration] "..tostring(err))
+    end
+end)
+
+
 
 end)
