@@ -1,9 +1,9 @@
 
-getgenv().__tomboyhook_loaded = nil
+getgenv().__knhook_loaded = nil
 
 task.spawn(function()
-if getgenv().__tomboyhook_loaded then return end
-getgenv().__tomboyhook_loaded = true
+if getgenv().__knhook_loaded then return end
+getgenv().__knhook_loaded = true
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(2)
 
@@ -36,10 +36,10 @@ local Library do
         _SliderAnimationConnection = nil,
 
         Folders = {
-            Directory = "tomboy.hook",
-            Configs = "tomboy.hook/Configs",
-            Assets = "tomboy.hook/Assets",
-			Sounds = "tomboy.hook/Sounds",
+            Directory = "Kn.Hook",
+            Configs = "Kn.Hook/Configs",
+            Assets = "Kn.Hook/Assets",
+			Sounds = "Kn.Hook/Sounds",
         },
 
         -- Ignore below
@@ -72,7 +72,7 @@ local Library do
     Library.__index = Library
     Library.Sections.__index = Library.Sections
     Library.Pages.__index = Library.Pages
-    getgenv().__tbhook_lib = Library
+    getgenv().__knhook_lib = Library
 end
 
 
@@ -1243,22 +1243,33 @@ task.wait()
 
 Library.Unload = function(self)
     pcall(function()
+        if cheat and cheat.utility and type(cheat.utility.unload) == "function" then
+            cheat.utility.unload()
+        end
+    end)
+    pcall(function()
         for _, c in ipairs(KN_ParticleConnections) do c:Disconnect() end
         table.clear(KN_ParticleConnections)
     end)
     pcall(function() KNStateManager:Cleanup() end)
+    if self._SliderAnimationConnection then
+        pcall(function() self._SliderAnimationConnection:Disconnect() end)
+        self._SliderAnimationConnection = nil
+    end
     for Index, Value in self.Connections do 
-        Value.Connection:Disconnect()
+        pcall(function() Value.Connection:Disconnect() end)
     end
-
     for Index, Value in self.Threads do 
-        coroutine.close(Value)
+        pcall(function() coroutine.close(Value) end)
     end
-
-    if self.Holder then 
-        self.Holder:Clean()
-    end
-
+    if self.Holder then pcall(function() self.Holder:Clean() end) end
+    if self.NotifHolder then pcall(function() self.NotifHolder:Clean() end) end
+    pcall(function()
+        getgenv().__knhook_loaded = nil
+        getgenv().__tomboyhook_loaded = nil
+        getgenv().__knhook_lib = nil
+        getgenv().__tbhook_lib = nil
+    end)
     Library = nil 
     getgenv().Library = nil
 end
@@ -1294,7 +1305,7 @@ Library.SafeCall = function(self, Function, ...)
     local Success, Result = pcall(Function, TableUnpack(Arguements))
 
     if not Success then
-        LocalPlayer:Kick("Tomboy.Hook Callback Error: " .. tostring(Result))
+        LocalPlayer:Kick("Kn.Hook Premium Callback Error: " .. tostring(Result))
         return false
     end
 
@@ -4875,9 +4886,13 @@ do
             Library.Flags[Toggle.Flag] = Value 
 
             if Toggle.Value then 
-                Items["IndicatorInline"]:Tween(TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2New(1, -2, 1, -2)})
+                Items["IndicatorInline"]:Tween(TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    BackgroundTransparency = 0, Size = UDim2New(1, -2, 1, -2)
+                })
             else
-                Items["IndicatorInline"]:Tween(TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 1, Size = UDim2New(0, -2, 0, -2)})
+                Items["IndicatorInline"]:Tween(TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                    BackgroundTransparency = 1, Size = UDim2New(0, -2, 0, -2)
+                })
             end
 
             if Toggle.Callback then 
@@ -4992,11 +5007,15 @@ do
             })                
 
             Items["Button"]:OnHover(function()
-                Items["Button"]:Tween(nil, {BackgroundColor3 = Library:GetLighterColor(Library.Theme.Element, 1.35)})
+                Items["Button"]:Tween(TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    BackgroundColor3 = Library:GetLighterColor(Library.Theme.Element, 1.45)
+                })
             end)
             
             Items["Button"]:OnHoverLeave(function()
-                Items["Button"]:Tween(nil, {BackgroundColor3 = Library.Theme.Element})
+                Items["Button"]:Tween(TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    BackgroundColor3 = Library.Theme.Element
+                })
             end)
         end
 
@@ -5028,8 +5047,11 @@ do
     if not Library._SliderAnimationConnection then
         local ScannerTime = 0
         Library._SliderAnimationConnection = RunService.RenderStepped:Connect(function(delta)
-            -- High-speed, frame-rate independent scanner.
+            -- Lively scanner: linear head + multi-segment trail + dual glow + accent shimmer.
             ScannerTime = ScannerTime + delta
+            local pulseA = 0.5 + 0.5 * MathSin(ScannerTime * 6.5)
+            local pulseB = 0.5 + 0.5 * MathSin(ScannerTime * 4.2 + 1.3)
+            local pulseC = 0.5 + 0.5 * MathSin(ScannerTime * 9.0 + 0.7)
 
             for SliderObject, Scanner in pairs(Library._SliderAnimations) do
                 if Scanner and Scanner.Parent and SliderObject and SliderObject.SliderFrame then
@@ -5042,27 +5064,97 @@ do
                         selected = MathClamp((value - min) / (max - min), 0, 1)
                     end
 
+                    local glow = SliderObject.ScannerGlow
+                    local glow2 = SliderObject.ScannerGlow2
+                    local trail1 = SliderObject.ScannerTrail1
+                    local trail2 = SliderObject.ScannerTrail2
+                    local trail3 = SliderObject.ScannerTrail3
+                    local shimmer = SliderObject.AccentShimmer
+
                     if selected <= 0.001 or not frame.Visible then
                         Scanner.Visible = false
+                        if glow then glow.Visible = false end
+                        if glow2 then glow2.Visible = false end
+                        if trail1 then trail1.Visible = false end
+                        if trail2 then trail2.Visible = false end
+                        if trail3 then trail3.Visible = false end
+                        if shimmer then shimmer.Visible = false end
                     else
-                        Scanner.Visible = true
                         local width = frame.AbsoluteSize.X
                         local selectedPixels = math.max(1, width * selected)
-                        local headPixels = math.clamp(width * 0.045, 6, 14)
+                        local headPixels = math.clamp(width * 0.052, 7, 16)
                         local maxX = math.max(0, selectedPixels - headPixels)
 
-                        -- Fast linear sweep. The head always reaches the exact
-                        -- end of the currently selected/fill area.
-                        local cycle = 1.25
+                        -- Linear sweep (same style you liked)
+                        local cycle = 1.2
                         local progress = (ScannerTime % cycle) / cycle
                         local xPixels = maxX * progress
 
+                        -- Head: brighter pulse
+                        Scanner.Visible = true
                         Scanner.Size = UDim2New(0, headPixels, 1, -2)
                         Scanner.Position = UDim2New(0, xPixels, 0, 1)
-
+                        Scanner.BackgroundTransparency = 0.02 + (1 - pulseA) * 0.28
                         local gradient = Scanner:FindFirstChildOfClass("UIGradient")
                         if gradient then
-                            gradient.Offset = Vector2.new(progress * 1.6 - 0.8, 0)
+                            gradient.Offset = Vector2.new(progress * 1.8 - 0.9, 0)
+                        end
+
+                        -- Outer glow (large, soft, slower pulse)
+                        if glow and glow.Parent then
+                            local gw = math.clamp(headPixels * 3.2, 16, 40)
+                            local gx = math.max(0, xPixels - (gw - headPixels) * 0.5)
+                            glow.Size = UDim2New(0, gw, 1, 0)
+                            glow.Position = UDim2New(0, gx, 0, 0)
+                            glow.BackgroundTransparency = 0.55 + (1 - pulseB) * 0.35
+                            glow.Visible = true
+                            local gg = glow:FindFirstChildOfClass("UIGradient")
+                            if gg then gg.Offset = Vector2.new(progress * 1.3 - 0.65, 0) end
+                        end
+
+                        -- Inner glow (tight, brighter, faster pulse)
+                        if glow2 and glow2.Parent then
+                            local gw2 = math.clamp(headPixels * 1.8, 10, 24)
+                            local gx2 = math.max(0, xPixels - (gw2 - headPixels) * 0.5)
+                            glow2.Size = UDim2New(0, gw2, 1, 0)
+                            glow2.Position = UDim2New(0, gx2, 0, 0)
+                            glow2.BackgroundTransparency = 0.25 + (1 - pulseC) * 0.4
+                            glow2.Visible = true
+                            local gg2 = glow2:FindFirstChildOfClass("UIGradient")
+                            if gg2 then gg2.Offset = Vector2.new(progress * 1.5 - 0.75, 0) end
+                        end
+
+                        -- Multi-segment fading trail (3 layers lagging behind)
+                        local function placeTrail(obj, lagFactor, widthMul, baseTrans, pulse)
+                            if not (obj and obj.Parent) then return end
+                            local tw = math.clamp(headPixels * widthMul, 10, 42)
+                            local lag = maxX * lagFactor
+                            local tx = math.max(0, xPixels - lag - tw * 0.3)
+                            obj.Size = UDim2New(0, tw, 1, -2)
+                            obj.Position = UDim2New(0, tx, 0, 1)
+                            obj.BackgroundTransparency = baseTrans + (1 - pulse) * 0.25
+                            obj.Visible = true
+                            local tg = obj:FindFirstChildOfClass("UIGradient")
+                            if tg then tg.Offset = Vector2.new(progress * 1.4 - 0.7, 0) end
+                        end
+                        placeTrail(trail1, 0.06, 2.2, 0.45, pulseA)
+                        placeTrail(trail2, 0.14, 2.8, 0.62, pulseB)
+                        placeTrail(trail3, 0.24, 3.4, 0.78, pulseC)
+
+                        -- Accent fill shimmer (sweeping highlight across filled portion)
+                        if shimmer and shimmer.Parent and selectedPixels > 8 then
+                            local shW = math.clamp(width * 0.12, 10, 28)
+                            local shCycle = 1.8
+                            local shProg = (ScannerTime % shCycle) / shCycle
+                            local shX = math.max(0, (selectedPixels - shW) * shProg)
+                            shimmer.Size = UDim2New(0, shW, 1, -2)
+                            shimmer.Position = UDim2New(0, shX + 1, 0, 1)
+                            shimmer.BackgroundTransparency = 0.35 + (1 - pulseB) * 0.4
+                            shimmer.Visible = true
+                            local sg = shimmer:FindFirstChildOfClass("UIGradient")
+                            if sg then sg.Offset = Vector2.new(shProg * 2 - 1, 0) end
+                        elseif shimmer then
+                            shimmer.Visible = false
                         end
                     end
                 end
@@ -5151,6 +5243,129 @@ do
                 BackgroundColor3 = FromRGB(94, 213, 213)
             })  Items["Accent"]:AddToTheme({BackgroundColor3 = "Accent"})
 
+            Items["AccentShimmer"] = Instances:Create("Frame", {
+                Parent = Items["Accent"].Instance,
+                Name = "\0",
+                ZIndex = 3,
+                Position = UDim2New(0, 0, 0, 0),
+                Size = UDim2New(0.15, 0, 1, 0),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.5,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["AccentShimmer"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.5, 0.1),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
+            -- Outer soft glow
+            Items["ScannerGlow"] = Instances:Create("Frame", {
+                Parent = Items["RealSlider"].Instance,
+                Name = "\0",
+                ZIndex = 3,
+                Position = UDim2New(0, 0, 0, 0),
+                Size = UDim2New(0.1, 0, 1, 0),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.6,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["ScannerGlow"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.5, 0.2),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
+            -- Inner bright glow
+            Items["ScannerGlow2"] = Instances:Create("Frame", {
+                Parent = Items["RealSlider"].Instance,
+                Name = "\0",
+                ZIndex = 4,
+                Position = UDim2New(0, 0, 0, 0),
+                Size = UDim2New(0.06, 0, 1, 0),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.35,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["ScannerGlow2"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.5, 0.05),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
+            -- Trail layers (far -> near)
+            Items["ScannerTrail3"] = Instances:Create("Frame", {
+                Parent = Items["RealSlider"].Instance,
+                Name = "\0",
+                ZIndex = 3,
+                Position = UDim2New(0, 0, 0, 1),
+                Size = UDim2New(0.08, 0, 1, -2),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.85,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["ScannerTrail3"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.4, 0.55),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
+            Items["ScannerTrail2"] = Instances:Create("Frame", {
+                Parent = Items["RealSlider"].Instance,
+                Name = "\0",
+                ZIndex = 3,
+                Position = UDim2New(0, 0, 0, 1),
+                Size = UDim2New(0.07, 0, 1, -2),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.7,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["ScannerTrail2"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.4, 0.4),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
+            Items["ScannerTrail1"] = Instances:Create("Frame", {
+                Parent = Items["RealSlider"].Instance,
+                Name = "\0",
+                ZIndex = 4,
+                Position = UDim2New(0, 0, 0, 1),
+                Size = UDim2New(0.055, 0, 1, -2),
+                BorderSizePixel = 0,
+                BackgroundTransparency = 0.5,
+                BackgroundColor3 = FromRGB(255, 255, 255)
+            })
+            Instances:Create("UIGradient", {
+                Parent = Items["ScannerTrail1"].Instance,
+                Name = "\0",
+                Rotation = 0,
+                Transparency = NumSequence({
+                    NumSequenceKeypoint(0, 1),
+                    NumSequenceKeypoint(0.4, 0.25),
+                    NumSequenceKeypoint(1, 1)
+                })
+            })
             Items["Scanner"] = Instances:Create("Frame", {
                 Parent = Items["RealSlider"].Instance,
                 Name = "\0",
@@ -5158,7 +5373,7 @@ do
                 Position = UDim2New(-0.04, 0, 0, 1),
                 Size = UDim2New(0.035, 0, 1, -2),
                 BorderSizePixel = 0,
-                BackgroundTransparency = 0.18,
+                BackgroundTransparency = 0.08,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
 
@@ -5211,7 +5426,12 @@ do
             Slider.Value = MathClamp(Library:Round(Value, Slider.Decimals), Slider.Min, Slider.Max)
             Library.Flags[Slider.Flag] = Slider.Value
 
-            Items["Accent"].Instance.Size = UDim2New((Slider.Value - Slider.Min) / (Slider.Max - Slider.Min), -2, 1, -2)
+            local fill = MathClamp((Slider.Value - Slider.Min) / (Slider.Max - Slider.Min), 0, 1)
+            pcall(function()
+                Tween:Create(Items["Accent"], TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2New(fill, -2, 1, -2)
+                })
+            end)
             Items["Value"].Instance.Text = StringFormat("%s%s", Slider.Value, Slider.Suffix)
 
             if Slider.Value <= Slider.Min then 
@@ -5226,6 +5446,12 @@ do
         end
 
         Slider.SliderFrame = Items["RealSlider"].Instance
+        Slider.ScannerGlow = Items["ScannerGlow"] and Items["ScannerGlow"].Instance
+        Slider.ScannerGlow2 = Items["ScannerGlow2"] and Items["ScannerGlow2"].Instance
+        Slider.ScannerTrail1 = Items["ScannerTrail1"] and Items["ScannerTrail1"].Instance
+        Slider.ScannerTrail2 = Items["ScannerTrail2"] and Items["ScannerTrail2"].Instance
+        Slider.ScannerTrail3 = Items["ScannerTrail3"] and Items["ScannerTrail3"].Instance
+        Slider.AccentShimmer = Items["AccentShimmer"] and Items["AccentShimmer"].Instance
         Library._SliderAnimations[Slider] = Items["Scanner"].Instance
 
         Items["RealSlider"]:Connect("InputBegan", function(Input)
@@ -6086,6 +6312,19 @@ do
                 game:GetService("TeleportService"):Teleport(game.PlaceId)
             end })
 
+            SettingsSection:Button({ Name="Unload Script", Callback=function()
+                pcall(function()
+                    Library:Notification("Unloading Kn.Hook Premium...", 2)
+                end)
+                task.delay(0.15, function()
+                    pcall(function()
+                        if Library and Library.Unload then
+                            Library:Unload()
+                        end
+                    end)
+                end)
+            end })
+
             SettingsSection:Toggle({
                 Name = "Watermark",
                 Flag = "Watermark",
@@ -6130,7 +6369,7 @@ do
         
 -- Language preference
 local Language = "Portuguese"
-local LanguageFile = "tomboy.hook/Language.json"
+local LanguageFile = "Kn.Hook/Language.json"
 
 local function LoadLanguagePreference()
     if isfile and isfile(LanguageFile) then
@@ -6470,8 +6709,8 @@ end
 local function SaveLanguagePreference(value)
     Language = value
     pcall(function()
-        if makefolder and not isfolder("tomboy.hook") then
-            makefolder("tomboy.hook")
+        if makefolder and not isfolder("Kn.Hook") then
+            makefolder("Kn.Hook")
         end
     end)
     pcall(function()
@@ -6714,10 +6953,10 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
 end
 return Library
 end)()
-Library = getgenv().__tbhook_lib
-getgenv().__tbhook_lib = nil
+Library = getgenv().__knhook_lib
+getgenv().__knhook_lib = nil
 if Library == nil then
-    warn("[tomboy.hook] Library init failed")
+    warn("[Kn.Hook Premium] Library init failed")
     return
 end
 
@@ -6886,8 +7125,8 @@ cheat.utility = {} do
         end
     end))
     cheat.utility.unload = function()
-        connection:Disconnect()
-        connection1:Disconnect()
+        pcall(function() connection:Disconnect() end)
+        pcall(function() connection1:Disconnect() end)
         for key, _ in pairs(cheat.connections.heartbeats) do
             cheat.connections.heartbeats[key] = nil
         end
@@ -6896,14 +7135,39 @@ cheat.utility = {} do
         end
         local to_remove = {}
         for k in pairs(cheat.drawings) do to_remove[#to_remove+1] = k end
-        for _, k in ipairs(to_remove) do cheat.drawings[k]:Remove(); cheat.drawings[k] = nil end
-        for hooked, original in pairs(cheat.hooks) do
-            if type(original) == "function" then
-                hookfunction(hooked, clonefunction(original))
-            else
-                hookmetamethod(original["instance"], original["metamethod"], clonefunction(original["func"]))
-            end
+        for _, k in ipairs(to_remove) do
+            pcall(function() cheat.drawings[k]:Remove() end)
+            cheat.drawings[k] = nil
         end
+        for hooked, original in pairs(cheat.hooks) do
+            pcall(function()
+                if type(original) == "function" then
+                    hookfunction(hooked, clonefunction(original))
+                elseif type(original) == "table" and original.metamethod and original.func then
+                    hookmetamethod(original.instance or game, original.metamethod, clonefunction(original.func))
+                end
+            end)
+        end
+        pcall(function()
+            if workspace.CurrentCamera then
+                workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+            end
+            if LocalPlayer then LocalPlayer.ReplicationFocus = nil end
+        end)
+        pcall(function()
+            if cheat.EspLibrary and type(cheat.EspLibrary.unload) == "function" then
+                cheat.EspLibrary.unload()
+            end
+        end)
+        pcall(function()
+            if silent_aim then
+                silent_aim.enabled = false
+                silent_aim.triggerbot = false
+                silent_aim.fov_show = false
+                silent_aim.target_part = nil
+            end
+            cheat.freecam_enabled = false
+        end)
     end
 end
 task.wait()
@@ -8735,6 +8999,11 @@ do
         end
         setnamecallmethod(methodstr); return __namecall(self, unpack(args,1,argCount))
     end)))
+    pcall(function()
+        cheat.hooks["__index"] = { instance = game, metamethod = "__index", func = __index }
+        cheat.hooks["__newindex"] = { instance = game, metamethod = "__newindex", func = __newindex }
+        cheat.hooks["__namecall"] = { instance = game, metamethod = "__namecall", func = __namecall }
+    end)
 end
 
 do
@@ -8862,8 +9131,8 @@ end
 
 task.wait(0.2)
 Library.Holder.Instance.Enabled = false
-local logoAsset = isfile("tomboy.hook/Assets/logo.png") and getcustomasset("tomboy.hook/Assets/logo.png") or nil
-local Window     = Library:Window({ Name = "Kn v1.0.0 PREMIUM", Logo = logoAsset or "" })
+local logoAsset = isfile("Kn.Hook/Assets/logo.png") and getcustomasset("Kn.Hook/Assets/logo.png") or nil
+local Window     = Library:Window({ Name = "Kn.Hook Premium", Logo = logoAsset or "" })
 
 -- ============================================================
 -- KN PERFORMANCE HUD - ALWAYS VISIBLE
@@ -9556,7 +9825,7 @@ do
 
     -- Target Info: compact, professional, draggable target panel.
     local TargetInfoGui = Instance.new("ScreenGui")
-    TargetInfoGui.Name = "TomboyTargetInfo"
+    TargetInfoGui.Name = "KnHookTargetInfo"
     TargetInfoGui.ResetOnSpawn = false
     TargetInfoGui.IgnoreGuiInset = true
     TargetInfoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -12210,7 +12479,7 @@ do
     -- My Profile: compact floating/draggable local-player statistics.
     -- ================================================================
     local profile_gui = Instance.new("ScreenGui")
-    profile_gui.Name = "TomboyMyProfile"
+    profile_gui.Name = "KnHookMyProfile"
     profile_gui.ResetOnSpawn = false
     profile_gui.IgnoreGuiInset = true
     profile_gui.Enabled = false
@@ -13000,7 +13269,7 @@ end
 
 cheat.EspLibrary.load()
 Library.Holder.Instance.Enabled = true
-Library:Notification("Loaded! Welcome.", 5)
+Library:Notification("Kn.Hook Premium loaded. Welcome.", 5)
 
 -- ================================================================
 -- KN OPTIONAL INTEGRATION LAYER
