@@ -72,7 +72,7 @@ local Library do
     Library.__index = Library
     Library.Sections.__index = Library.Sections
     Library.Pages.__index = Library.Pages
-    getgenv().__knhook_lib = Library
+    getgenv().__tbhook_lib = Library
 end
 
 
@@ -1256,10 +1256,10 @@ Library.Unload = function(self)
         pcall(function() self._SliderAnimationConnection:Disconnect() end)
         self._SliderAnimationConnection = nil
     end
-    for Index, Value in self.Connections do 
+    for Index, Value in self.Connections do
         pcall(function() Value.Connection:Disconnect() end)
     end
-    for Index, Value in self.Threads do 
+    for Index, Value in self.Threads do
         pcall(function() coroutine.close(Value) end)
     end
     if self.Holder then pcall(function() self.Holder:Clean() end) end
@@ -1267,10 +1267,8 @@ Library.Unload = function(self)
     pcall(function()
         getgenv().__knhook_loaded = nil
         getgenv().__tomboyhook_loaded = nil
-        getgenv().__knhook_lib = nil
-        getgenv().__tbhook_lib = nil
     end)
-    Library = nil 
+    Library = nil
     getgenv().Library = nil
 end
 
@@ -1305,7 +1303,7 @@ Library.SafeCall = function(self, Function, ...)
     local Success, Result = pcall(Function, TableUnpack(Arguements))
 
     if not Success then
-        LocalPlayer:Kick("Kn.Hook Premium Callback Error: " .. tostring(Result))
+        LocalPlayer:Kick("Tomboy.Hook Callback Error: " .. tostring(Result))
         return false
     end
 
@@ -4098,8 +4096,15 @@ do
                 BorderSizePixel = 0,
                 AutomaticSize = Enum.AutomaticSize.X,
                 TextSize = 14,
-                BackgroundColor3 = FromRGB(255, 255, 255)
+                BackgroundColor3 = FromRGB(255, 255, 255),
+                RichText = true
             })  Items["Title"]:AddToTheme({TextColor3 = "Text"})
+            pcall(function()
+                local base = tostring(Window.Name or "Kn.Hook")
+                local pretty = base:gsub("[Pp]remium", '<font color="#FFD700"><b>PREMIUM</b></font>')
+                if pretty == base then pretty = base .. ' <font color="#FFD700"><b>PREMIUM</b></font>' end
+                Items["Title"].Instance.Text = pretty
+            end)
             
             Items["Content"] = Instances:Create("Frame", {
                 Parent = Items["Inline"].Instance,
@@ -4305,6 +4310,25 @@ do
             ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         })
         Items["ExternalToggleStroke"]:AddToTheme({Color = "Accent"})
+        task.spawn(function()
+            local t0 = 0
+            while Items["ExternalToggle"] and Items["ExternalToggle"].Instance and Items["ExternalToggle"].Instance.Parent do
+                t0 = t0 + task.wait()
+                local pulse = 0.5 + 0.5 * math.sin(t0 * 3.2)
+                pcall(function()
+                    local glow = Items["ExternalToggleGlow"] and Items["ExternalToggleGlow"].Instance
+                    if glow then
+                        glow.ImageTransparency = 0.45 + (1-pulse)*0.4
+                        glow.Size = UDim2New(1, 14+pulse*12, 1, 14+pulse*12)
+                    end
+                    local stroke = Items["ExternalToggleStroke"] and Items["ExternalToggleStroke"].Instance
+                    if stroke then
+                        stroke.Thickness = 1 + pulse*1.25
+                        stroke.Transparency = 0.15 + (1-pulse)*0.35
+                    end
+                end)
+            end
+        end)
 
         -- External button: draggable on mouse/touch, while a short click still toggles the menu.
         do
@@ -4594,32 +4618,25 @@ do
         local Debounce = false
 
         function Page:Turn(Bool)
-            if Debounce then 
-                return 
-            end
-
-            Page.Active = Bool 
-            
+            if Debounce then return end
+            Page.Active = Bool
             Debounce = true
-            Items["Page"].Instance.Visible = Bool 
+            Items["Page"].Instance.Visible = Bool
             Items["Page"].Instance.Parent = Bool and Page.Window.Items["Content"].Instance or Library.UnusedHolder.Instance
-
             if Page.Active then
-                Items["Liner"]:Tween(TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2New(1, 0, 0, 1)})
-                Items["TextGlow"]:Tween(nil, {ImageTransparency = 0.7})
-                Items["Text"]:Tween(nil, {TextTransparency = 0})
-                Items["Hide"]:Tween(nil, {BackgroundTransparency = 0})
-
-                Items["Page"]:Tween(TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 35)})
+                Items["Page"].Instance.Position = UDim2New(0, 0, 0, 55)
+                Items["Liner"]:Tween(TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2New(1, 0, 0, 1)})
+                Items["TextGlow"]:Tween(TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageTransparency = 0.55})
+                Items["Text"]:Tween(TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0})
+                Items["Hide"]:Tween(TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0})
+                Items["Page"]:Tween(TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 35)})
             else
-                Items["Liner"]:Tween(TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2New(0, 0, 0, 1)})
-                Items["TextGlow"]:Tween(nil, {ImageTransparency = 1})
-                Items["Text"]:Tween(nil, {TextTransparency = 0.4})
-                Items["Hide"]:Tween(nil, {BackgroundTransparency = 1})
-
-                Items["Page"]:Tween(TweenInfo.new(0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2New(0, 0, 0, 80)})
+                Items["Liner"]:Tween(TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1, Size = UDim2New(0, 0, 0, 1)})
+                Items["TextGlow"]:Tween(TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {ImageTransparency = 1})
+                Items["Text"]:Tween(TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {TextTransparency = 0.45})
+                Items["Hide"]:Tween(TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1})
+                Items["Page"]:Tween(TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2New(0, 0, 0, 72)})
             end
-
             Debounce = false
         end
 
@@ -4886,13 +4903,9 @@ do
             Library.Flags[Toggle.Flag] = Value 
 
             if Toggle.Value then 
-                Items["IndicatorInline"]:Tween(TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                    BackgroundTransparency = 0, Size = UDim2New(1, -2, 1, -2)
-                })
+                Items["IndicatorInline"]:Tween(TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2New(1, -2, 1, -2)})
             else
-                Items["IndicatorInline"]:Tween(TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                    BackgroundTransparency = 1, Size = UDim2New(0, -2, 0, -2)
-                })
+                Items["IndicatorInline"]:Tween(TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 1, Size = UDim2New(0, -2, 0, -2)})
             end
 
             if Toggle.Callback then 
@@ -5007,15 +5020,11 @@ do
             })                
 
             Items["Button"]:OnHover(function()
-                Items["Button"]:Tween(TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    BackgroundColor3 = Library:GetLighterColor(Library.Theme.Element, 1.45)
-                })
+                Items["Button"]:Tween(nil, {BackgroundColor3 = Library:GetLighterColor(Library.Theme.Element, 1.35)})
             end)
             
             Items["Button"]:OnHoverLeave(function()
-                Items["Button"]:Tween(TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    BackgroundColor3 = Library.Theme.Element
-                })
+                Items["Button"]:Tween(nil, {BackgroundColor3 = Library.Theme.Element})
             end)
         end
 
@@ -5047,11 +5056,8 @@ do
     if not Library._SliderAnimationConnection then
         local ScannerTime = 0
         Library._SliderAnimationConnection = RunService.RenderStepped:Connect(function(delta)
-            -- Lively scanner: linear head + multi-segment trail + dual glow + accent shimmer.
+            -- High-speed, frame-rate independent scanner.
             ScannerTime = ScannerTime + delta
-            local pulseA = 0.5 + 0.5 * MathSin(ScannerTime * 6.5)
-            local pulseB = 0.5 + 0.5 * MathSin(ScannerTime * 4.2 + 1.3)
-            local pulseC = 0.5 + 0.5 * MathSin(ScannerTime * 9.0 + 0.7)
 
             for SliderObject, Scanner in pairs(Library._SliderAnimations) do
                 if Scanner and Scanner.Parent and SliderObject and SliderObject.SliderFrame then
@@ -5064,97 +5070,27 @@ do
                         selected = MathClamp((value - min) / (max - min), 0, 1)
                     end
 
-                    local glow = SliderObject.ScannerGlow
-                    local glow2 = SliderObject.ScannerGlow2
-                    local trail1 = SliderObject.ScannerTrail1
-                    local trail2 = SliderObject.ScannerTrail2
-                    local trail3 = SliderObject.ScannerTrail3
-                    local shimmer = SliderObject.AccentShimmer
-
                     if selected <= 0.001 or not frame.Visible then
                         Scanner.Visible = false
-                        if glow then glow.Visible = false end
-                        if glow2 then glow2.Visible = false end
-                        if trail1 then trail1.Visible = false end
-                        if trail2 then trail2.Visible = false end
-                        if trail3 then trail3.Visible = false end
-                        if shimmer then shimmer.Visible = false end
                     else
+                        Scanner.Visible = true
                         local width = frame.AbsoluteSize.X
                         local selectedPixels = math.max(1, width * selected)
-                        local headPixels = math.clamp(width * 0.052, 7, 16)
+                        local headPixels = math.clamp(width * 0.045, 6, 14)
                         local maxX = math.max(0, selectedPixels - headPixels)
 
-                        -- Linear sweep (same style you liked)
-                        local cycle = 1.2
+                        -- Fast linear sweep. The head always reaches the exact
+                        -- end of the currently selected/fill area.
+                        local cycle = 1.25
                         local progress = (ScannerTime % cycle) / cycle
                         local xPixels = maxX * progress
 
-                        -- Head: brighter pulse
-                        Scanner.Visible = true
                         Scanner.Size = UDim2New(0, headPixels, 1, -2)
                         Scanner.Position = UDim2New(0, xPixels, 0, 1)
-                        Scanner.BackgroundTransparency = 0.02 + (1 - pulseA) * 0.28
+
                         local gradient = Scanner:FindFirstChildOfClass("UIGradient")
                         if gradient then
-                            gradient.Offset = Vector2.new(progress * 1.8 - 0.9, 0)
-                        end
-
-                        -- Outer glow (large, soft, slower pulse)
-                        if glow and glow.Parent then
-                            local gw = math.clamp(headPixels * 3.2, 16, 40)
-                            local gx = math.max(0, xPixels - (gw - headPixels) * 0.5)
-                            glow.Size = UDim2New(0, gw, 1, 0)
-                            glow.Position = UDim2New(0, gx, 0, 0)
-                            glow.BackgroundTransparency = 0.55 + (1 - pulseB) * 0.35
-                            glow.Visible = true
-                            local gg = glow:FindFirstChildOfClass("UIGradient")
-                            if gg then gg.Offset = Vector2.new(progress * 1.3 - 0.65, 0) end
-                        end
-
-                        -- Inner glow (tight, brighter, faster pulse)
-                        if glow2 and glow2.Parent then
-                            local gw2 = math.clamp(headPixels * 1.8, 10, 24)
-                            local gx2 = math.max(0, xPixels - (gw2 - headPixels) * 0.5)
-                            glow2.Size = UDim2New(0, gw2, 1, 0)
-                            glow2.Position = UDim2New(0, gx2, 0, 0)
-                            glow2.BackgroundTransparency = 0.25 + (1 - pulseC) * 0.4
-                            glow2.Visible = true
-                            local gg2 = glow2:FindFirstChildOfClass("UIGradient")
-                            if gg2 then gg2.Offset = Vector2.new(progress * 1.5 - 0.75, 0) end
-                        end
-
-                        -- Multi-segment fading trail (3 layers lagging behind)
-                        local function placeTrail(obj, lagFactor, widthMul, baseTrans, pulse)
-                            if not (obj and obj.Parent) then return end
-                            local tw = math.clamp(headPixels * widthMul, 10, 42)
-                            local lag = maxX * lagFactor
-                            local tx = math.max(0, xPixels - lag - tw * 0.3)
-                            obj.Size = UDim2New(0, tw, 1, -2)
-                            obj.Position = UDim2New(0, tx, 0, 1)
-                            obj.BackgroundTransparency = baseTrans + (1 - pulse) * 0.25
-                            obj.Visible = true
-                            local tg = obj:FindFirstChildOfClass("UIGradient")
-                            if tg then tg.Offset = Vector2.new(progress * 1.4 - 0.7, 0) end
-                        end
-                        placeTrail(trail1, 0.06, 2.2, 0.45, pulseA)
-                        placeTrail(trail2, 0.14, 2.8, 0.62, pulseB)
-                        placeTrail(trail3, 0.24, 3.4, 0.78, pulseC)
-
-                        -- Accent fill shimmer (sweeping highlight across filled portion)
-                        if shimmer and shimmer.Parent and selectedPixels > 8 then
-                            local shW = math.clamp(width * 0.12, 10, 28)
-                            local shCycle = 1.8
-                            local shProg = (ScannerTime % shCycle) / shCycle
-                            local shX = math.max(0, (selectedPixels - shW) * shProg)
-                            shimmer.Size = UDim2New(0, shW, 1, -2)
-                            shimmer.Position = UDim2New(0, shX + 1, 0, 1)
-                            shimmer.BackgroundTransparency = 0.35 + (1 - pulseB) * 0.4
-                            shimmer.Visible = true
-                            local sg = shimmer:FindFirstChildOfClass("UIGradient")
-                            if sg then sg.Offset = Vector2.new(shProg * 2 - 1, 0) end
-                        elseif shimmer then
-                            shimmer.Visible = false
+                            gradient.Offset = Vector2.new(progress * 1.6 - 0.8, 0)
                         end
                     end
                 end
@@ -5243,129 +5179,6 @@ do
                 BackgroundColor3 = FromRGB(94, 213, 213)
             })  Items["Accent"]:AddToTheme({BackgroundColor3 = "Accent"})
 
-            Items["AccentShimmer"] = Instances:Create("Frame", {
-                Parent = Items["Accent"].Instance,
-                Name = "\0",
-                ZIndex = 3,
-                Position = UDim2New(0, 0, 0, 0),
-                Size = UDim2New(0.15, 0, 1, 0),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.5,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["AccentShimmer"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.5, 0.1),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
-            -- Outer soft glow
-            Items["ScannerGlow"] = Instances:Create("Frame", {
-                Parent = Items["RealSlider"].Instance,
-                Name = "\0",
-                ZIndex = 3,
-                Position = UDim2New(0, 0, 0, 0),
-                Size = UDim2New(0.1, 0, 1, 0),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.6,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["ScannerGlow"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.5, 0.2),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
-            -- Inner bright glow
-            Items["ScannerGlow2"] = Instances:Create("Frame", {
-                Parent = Items["RealSlider"].Instance,
-                Name = "\0",
-                ZIndex = 4,
-                Position = UDim2New(0, 0, 0, 0),
-                Size = UDim2New(0.06, 0, 1, 0),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.35,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["ScannerGlow2"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.5, 0.05),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
-            -- Trail layers (far -> near)
-            Items["ScannerTrail3"] = Instances:Create("Frame", {
-                Parent = Items["RealSlider"].Instance,
-                Name = "\0",
-                ZIndex = 3,
-                Position = UDim2New(0, 0, 0, 1),
-                Size = UDim2New(0.08, 0, 1, -2),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.85,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["ScannerTrail3"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.4, 0.55),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
-            Items["ScannerTrail2"] = Instances:Create("Frame", {
-                Parent = Items["RealSlider"].Instance,
-                Name = "\0",
-                ZIndex = 3,
-                Position = UDim2New(0, 0, 0, 1),
-                Size = UDim2New(0.07, 0, 1, -2),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.7,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["ScannerTrail2"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.4, 0.4),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
-            Items["ScannerTrail1"] = Instances:Create("Frame", {
-                Parent = Items["RealSlider"].Instance,
-                Name = "\0",
-                ZIndex = 4,
-                Position = UDim2New(0, 0, 0, 1),
-                Size = UDim2New(0.055, 0, 1, -2),
-                BorderSizePixel = 0,
-                BackgroundTransparency = 0.5,
-                BackgroundColor3 = FromRGB(255, 255, 255)
-            })
-            Instances:Create("UIGradient", {
-                Parent = Items["ScannerTrail1"].Instance,
-                Name = "\0",
-                Rotation = 0,
-                Transparency = NumSequence({
-                    NumSequenceKeypoint(0, 1),
-                    NumSequenceKeypoint(0.4, 0.25),
-                    NumSequenceKeypoint(1, 1)
-                })
-            })
             Items["Scanner"] = Instances:Create("Frame", {
                 Parent = Items["RealSlider"].Instance,
                 Name = "\0",
@@ -5373,7 +5186,7 @@ do
                 Position = UDim2New(-0.04, 0, 0, 1),
                 Size = UDim2New(0.035, 0, 1, -2),
                 BorderSizePixel = 0,
-                BackgroundTransparency = 0.08,
+                BackgroundTransparency = 0.18,
                 BackgroundColor3 = FromRGB(255, 255, 255)
             })
 
@@ -5426,12 +5239,7 @@ do
             Slider.Value = MathClamp(Library:Round(Value, Slider.Decimals), Slider.Min, Slider.Max)
             Library.Flags[Slider.Flag] = Slider.Value
 
-            local fill = MathClamp((Slider.Value - Slider.Min) / (Slider.Max - Slider.Min), 0, 1)
-            pcall(function()
-                Tween:Create(Items["Accent"], TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = UDim2New(fill, -2, 1, -2)
-                })
-            end)
+            Items["Accent"].Instance.Size = UDim2New((Slider.Value - Slider.Min) / (Slider.Max - Slider.Min), -2, 1, -2)
             Items["Value"].Instance.Text = StringFormat("%s%s", Slider.Value, Slider.Suffix)
 
             if Slider.Value <= Slider.Min then 
@@ -5446,12 +5254,6 @@ do
         end
 
         Slider.SliderFrame = Items["RealSlider"].Instance
-        Slider.ScannerGlow = Items["ScannerGlow"] and Items["ScannerGlow"].Instance
-        Slider.ScannerGlow2 = Items["ScannerGlow2"] and Items["ScannerGlow2"].Instance
-        Slider.ScannerTrail1 = Items["ScannerTrail1"] and Items["ScannerTrail1"].Instance
-        Slider.ScannerTrail2 = Items["ScannerTrail2"] and Items["ScannerTrail2"].Instance
-        Slider.ScannerTrail3 = Items["ScannerTrail3"] and Items["ScannerTrail3"].Instance
-        Slider.AccentShimmer = Items["AccentShimmer"] and Items["AccentShimmer"].Instance
         Library._SliderAnimations[Slider] = Items["Scanner"].Instance
 
         Items["RealSlider"]:Connect("InputBegan", function(Input)
@@ -6313,17 +6115,23 @@ do
             end })
 
             SettingsSection:Button({ Name="Unload Script", Callback=function()
-                pcall(function()
-                    Library:Notification("Unloading Kn.Hook Premium...", 2)
-                end)
+                pcall(function() Library:Notification("Unloading Kn.Hook Premium...", 2) end)
                 task.delay(0.15, function()
-                    pcall(function()
-                        if Library and Library.Unload then
-                            Library:Unload()
-                        end
-                    end)
+                    pcall(function() if Library and Library.Unload then Library:Unload() end end)
                 end)
             end })
+
+            SettingsSection:Toggle({
+                Name = "Performance Panel",
+                Flag = "cfg_perf_panel",
+                Default = false,
+                Callback = function(Value)
+                    pcall(function()
+                        local gui = (gethui and gethui() or game:GetService("CoreGui")):FindFirstChild("KN_PerformanceHUD")
+                        if gui then gui.Enabled = Value == true end
+                    end)
+                end
+            })
 
             SettingsSection:Toggle({
                 Name = "Watermark",
@@ -6953,8 +6761,8 @@ local ConfigsSection = SettingsPage:Section({Name = "Configs", Side = 2}) do
 end
 return Library
 end)()
-Library = getgenv().__knhook_lib
-getgenv().__knhook_lib = nil
+Library = getgenv().__tbhook_lib
+getgenv().__tbhook_lib = nil
 if Library == nil then
     warn("[Kn.Hook Premium] Library init failed")
     return
@@ -7125,8 +6933,8 @@ cheat.utility = {} do
         end
     end))
     cheat.utility.unload = function()
-        pcall(function() connection:Disconnect() end)
-        pcall(function() connection1:Disconnect() end)
+        connection:Disconnect()
+        connection1:Disconnect()
         for key, _ in pairs(cheat.connections.heartbeats) do
             cheat.connections.heartbeats[key] = nil
         end
@@ -7135,42 +6943,19 @@ cheat.utility = {} do
         end
         local to_remove = {}
         for k in pairs(cheat.drawings) do to_remove[#to_remove+1] = k end
-        for _, k in ipairs(to_remove) do
-            pcall(function() cheat.drawings[k]:Remove() end)
-            cheat.drawings[k] = nil
-        end
+        for _, k in ipairs(to_remove) do cheat.drawings[k]:Remove(); cheat.drawings[k] = nil end
         for hooked, original in pairs(cheat.hooks) do
-            pcall(function()
-                if type(original) == "function" then
-                    hookfunction(hooked, clonefunction(original))
-                elseif type(original) == "table" and original.metamethod and original.func then
-                    hookmetamethod(original.instance or game, original.metamethod, clonefunction(original.func))
-                end
-            end)
+            if type(original) == "function" then
+                hookfunction(hooked, clonefunction(original))
+            else
+                hookmetamethod(original["instance"], original["metamethod"], clonefunction(original["func"]))
+            end
         end
-        pcall(function()
-            if workspace.CurrentCamera then
-                workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-            end
-            if LocalPlayer then LocalPlayer.ReplicationFocus = nil end
-        end)
-        pcall(function()
-            if cheat.EspLibrary and type(cheat.EspLibrary.unload) == "function" then
-                cheat.EspLibrary.unload()
-            end
-        end)
-        pcall(function()
-            if silent_aim then
-                silent_aim.enabled = false
-                silent_aim.triggerbot = false
-                silent_aim.fov_show = false
-                silent_aim.target_part = nil
-            end
-            cheat.freecam_enabled = false
-        end)
     end
 end
 task.wait()
+cheat._my_kill_names = {}
+cheat._player_join_time = {}
 cheat.EspLibrary = {} (function()
     local esp_table = {}
     local workspace = cloneref(Workspace)
@@ -7178,14 +6963,35 @@ cheat.EspLibrary = {} (function()
     local lplr = plrs.LocalPlayer
     local success, coregui = pcall(game.GetService, game, "CoreGui")
     local container = Instance.new("Folder", (success and coregui:FindFirstChild("RobloxGui")) or lplr:WaitForChild("PlayerGui", 2) or lplr)
+    local esp_ui_gui = Instance.new("ScreenGui")
+    esp_ui_gui.Name = "KnEspUiText"
+    esp_ui_gui.ResetOnSpawn = false
+    esp_ui_gui.IgnoreGuiInset = true
+    pcall(function() esp_ui_gui.Parent = (success and coregui) or lplr:FindFirstChildOfClass("PlayerGui") or lplr end)
+    function make_ui_text()
+        local lbl = Instance.new("TextLabel")
+        lbl.BackgroundTransparency = 1
+        lbl.AnchorPoint = Vector2.new(0.5, 0.5)
+        lbl.Size = UDim2.new(0, 260, 0, 22)
+        lbl.TextSize = 14
+        lbl.TextColor3 = Color3.new(1,1,1)
+        lbl.TextStrokeTransparency = 0
+        lbl.TextStrokeColor3 = Color3.new(0,0,0)
+        lbl.Visible = false
+        lbl.Parent = esp_ui_gui
+        pcall(function() if Library and Library.Font then lbl.FontFace = Library.Font end end)
+        return lbl
+    end
+
     esp_table = {
         __loaded = false,
         main_settings = {
             textSize = 14,
             textFont = Drawing.Fonts.Monospace,
             distancelimit = true,
-            maxdistance = 1200,
+            maxdistance = 5000,
             fadetime = 1,
+            health_text_size = 12,
             infiniterange = false
         },
         main_object_settings = {
@@ -7213,7 +7019,7 @@ cheat.EspLibrary = {} (function()
                 visible_check = true,
                 outline = false,
                 outline_visible_check = true,
-                outline_color = { Color3.fromRGB(255, 255, 255), 1 },
+                outline_color = { Color3.fromRGB(80, 255, 160), 0 },
                 box_color = { Color3.new(1, 1, 1), 1 },
                 box_fill_color = { Color3.new(1, 0, 0), 0.5 },
                 realname_color = { Color3.new(1, 1, 1), 1 },
@@ -7228,10 +7034,10 @@ cheat.EspLibrary = {} (function()
                 dist_outline_color = Color3.new(),
                 chams = false,
                 chams_visible_only = false,
-                chams_fill_color        = { Color3.fromRGB(255, 255, 255), 0.7 },
-                chamsoutline_color      = { Color3.fromRGB(255, 255, 255), 0 },
-                chams_outline           = false,
-                chams_material          = "Neon",
+                chams_fill_color        = { Color3.fromRGB(40, 180, 120), 0.45 },
+                chamsoutline_color      = { Color3.fromRGB(80, 255, 160), 0 },
+                chams_outline           = true,
+                chams_material          = "Highlight",
                 chams_rainbow           = false,
                 chams_pulse             = false,
                 chams_health_reactive   = false,
@@ -7248,7 +7054,8 @@ cheat.EspLibrary = {} (function()
                 distance = false,
                 color = Color3.fromRGB(190, 85, 0),
                 outline = false,
-                outline_color = Color3.new()
+                outline_color = Color3.new(),
+                only_my_kills = false,
             }
         }
     }
@@ -7381,6 +7188,10 @@ cheat.EspLibrary = {} (function()
                 health_bar_cap_bottom = esp.create_obj("Circle", { Visible = false, Filled = true, ZIndex = 2 }),
                 dist = esp.create_obj("Text", { Center = true, Visible = false }),
                 weapon = esp.create_obj("Text", { Center = true, Visible = false }),
+                ui_name = make_ui_text(),
+                ui_dist = make_ui_text(),
+                ui_weapon = make_ui_text(),
+                ui_health = make_ui_text(),
             },
             chams_object = Instance.new("Highlight", container),
             outline_object = Instance.new("Highlight", container),
@@ -7457,16 +7268,15 @@ cheat.EspLibrary = {} (function()
             local isWireframe = settings.chams_material == "Wireframe"
             local _esp_green = Color3.fromRGB(0, 255, 0)
             plr:update_visible_state(true)
-            cham.DepthMode = settings.chams_visible_only and 1 or 0
+            cham.DepthMode = settings.chams_visible_only and Enum.HighlightDepthMode.Occluded or Enum.HighlightDepthMode.AlwaysOnTop
             cham.FillColor = settings.chams_fill_color[1]
-            cham.FillTransparency = isWireframe and 1 or settings.chams_fill_color[2]
+            cham.FillTransparency = isWireframe and 1 or math.clamp(settings.chams_fill_color[2], 0, 0.95)
             cham.OutlineColor = settings.chamsoutline_color[1]
-            cham.OutlineTransparency = settings.chams_outline and settings.chamsoutline_color[2] or 1
+            cham.OutlineTransparency = settings.chams_outline and math.clamp(settings.chamsoutline_color[2] or 0, 0, 0.35) or 1
             outline.Adornee = character
-            -- ESP Outline is a silhouette-style Highlight: fully transparent fill,
-            -- crisp outline, and AlwaysOnTop so it remains useful through geometry.
             outline.FillTransparency = 1
-            outline.OutlineTransparency = settings.outline and math.clamp(settings.outline_color[2] or 0, 0, 1) or 1
+            outline.OutlineColor = settings.outline_color[1]
+            outline.OutlineTransparency = settings.outline and math.clamp(settings.outline_color[2] or 0, 0, 0.25) or 1
             outline.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
             realname.Size = main_settings.textSize
             realname.Font = main_settings.textFont
@@ -7495,8 +7305,8 @@ cheat.EspLibrary = {} (function()
                 end
             end
             if setvis_cache then
-                cham.Enabled = settings.chams
-                outline.Enabled = settings.outline
+                cham.Enabled = settings.chams == true
+                outline.Enabled = settings.outline == true
                 box.Visible = settings.box
                 box_fill.Visible = settings.box_fill
                 realname.Visible = settings.realname
@@ -7528,35 +7338,51 @@ cheat.EspLibrary = {} (function()
             if setvis_cache ~= bool then
                 setvis_cache = bool
                 if not bool then
-                        for _, v in obj do v.Visible = false end
-                        cham.Enabled = false
-                        outline.Enabled = false
+                    for _, v in pairs(obj) do
+                        pcall(function() if v and v.Visible ~= nil then v.Visible = false end end)
+                    end
+                    for _, key in ipairs({"ui_name","ui_dist","ui_weapon","ui_health"}) do
+                        pcall(function() if obj[key] then obj[key].Visible = false end end)
+                    end
+                    for required, _ in next, skeleton_order do
+                        pcall(function() local sk=obj["skeleton_"..required]; if sk then sk.Visible=false end end)
+                    end
+                    for i=1,10 do pcall(function() if obj["health_bar_"..i] then obj["health_bar_"..i].Visible=false end end) end
+                    for i=1,6 do
+                        pcall(function()
+                            if obj["health_bar_glow_"..i] then obj["health_bar_glow_"..i].Visible=false end
+                            if obj["health_bar_glow_cap_top_"..i] then obj["health_bar_glow_cap_top_"..i].Visible=false end
+                            if obj["health_bar_glow_cap_bottom_"..i] then obj["health_bar_glow_cap_bottom_"..i].Visible=false end
+                        end)
+                    end
+                    pcall(function() if obj.health_bar_cap_top then obj.health_bar_cap_top.Visible=false end end)
+                    pcall(function() if obj.health_bar_cap_bottom then obj.health_bar_cap_bottom.Visible=false end end)
+                    cham.Enabled = false
+                    outline.Enabled = false
                 else
-                    cham.Enabled = settings.chams
-                    outline.Enabled = settings.outline
-                    box.Visible = settings.box
-                    box_fill.Visible = settings.box_fill
-                    realname.Visible = settings.realname
-                    healthtext.Visible = settings.health
-                    obj.health_bar_cap_top.Visible = settings.health
-                    obj.health_bar_cap_bottom.Visible = settings.health
+                    cham.Enabled = settings.chams == true
+                    outline.Enabled = settings.outline == true
+                    box.Visible = settings.box == true
+                    box_fill.Visible = settings.box_fill == true
+                    realname.Visible = settings.realname == true and not obj.ui_name
+                    healthtext.Visible = settings.health == true and not obj.ui_health
+                    dist.Visible = settings.dist == true and not obj.ui_dist
+                    weapon.Visible = settings.weapon == true and not obj.ui_weapon
+                    obj.health_bar_cap_top.Visible = settings.health == true
+                    obj.health_bar_cap_bottom.Visible = settings.health == true
                     for i = 1, 6 do
-                        if obj["health_bar_glow_"..i] then 
-                            obj["health_bar_glow_"..i].Visible = settings.health
-                            obj["health_bar_glow_cap_top_"..i].Visible = settings.health
-                            obj["health_bar_glow_cap_bottom_"..i].Visible = settings.health
+                        if obj["health_bar_glow_"..i] then
+                            obj["health_bar_glow_"..i].Visible = settings.health == true
+                            obj["health_bar_glow_cap_top_"..i].Visible = settings.health == true
+                            obj["health_bar_glow_cap_bottom_"..i].Visible = settings.health == true
                         end
                     end
                     for i = 1, 10 do
-                        obj["health_bar_"..i].Visible = settings.health
+                        if obj["health_bar_"..i] then obj["health_bar_"..i].Visible = settings.health == true end
                     end
-                    dist.Visible = settings.dist
-                    weapon.Visible = settings.weapon
                     for required, _ in next, skeleton_order do
                         local skeletonobj = obj["skeleton_" .. required]
-                        if (skeletonobj) then
-                            skeletonobj.Visible = settings.skeleton
-                        end
+                        if skeletonobj then skeletonobj.Visible = settings.skeleton == true end
                     end
                 end
             end
@@ -7614,7 +7440,7 @@ cheat.EspLibrary = {} (function()
             -- 500 m limit on already-created ESP objects. Roblox uses studs here; the UI
             -- displays meters at roughly 3 studs per meter for this game.
             local configured_meters = tonumber(Library.Flags and Library.Flags.esp_distance) or (main_settings.maxdistance / 3)
-            local effective_maxdistance = main_settings.infiniterange and math.huge or math.max(50, configured_meters * 3)
+            local effective_maxdistance = main_settings.infiniterange and math.huge or math.clamp(math.max(50, configured_meters * 3), 50, 5000)
             if main_settings.maxdistance ~= effective_maxdistance then
                 main_settings.maxdistance = effective_maxdistance
             end
@@ -7682,12 +7508,32 @@ cheat.EspLibrary = {} (function()
                 local _team_mark = (not isnpc) and silent_aim and ((silent_aim.native_whitelist and silent_aim.native_whitelist[player.Name]) or (silent_aim.whitelist_mode and silent_aim.whitelist and silent_aim.whitelist[player.Name]))
                 realname.Text = isnpc and ("BOT | " .. player.Name) or (player.Name .. (_team_mark and " [TEAM]" or ""))
                 realname.OutlineColor = settings.dist_outline_color
+                if obj.ui_name then
+                    local p = realname.Position
+                    local ts = tonumber(main_settings.textSize) or 14
+                    obj.ui_name.Text = realname.Text
+                    obj.ui_name.TextSize = ts
+                    obj.ui_name.Position = UDim2.fromOffset(p.X, p.Y)
+                    obj.ui_name.TextColor3 = realname.Color or Color3.new(1,1,1)
+                    pcall(function() if Library and Library.Font then obj.ui_name.FontFace = Library.Font end end)
+                    obj.ui_name.Visible = settings.realname == true
+                    realname.Visible = false
+                end
             end
             do
                 local pos = (corners.bottomLeft + corners.bottomRight) * 0.5
                 dist.Text = mathround(humanoid_distance / 3) .. "m"
-                -- Put distance slightly below the bottom of the character/box.
                 dist.Position = pos + _Vector2new(0, 8)
+                if obj.ui_dist then
+                    local ts = tonumber(main_settings.textSize) or 14
+                    obj.ui_dist.Text = dist.Text
+                    obj.ui_dist.TextSize = ts
+                    obj.ui_dist.Position = UDim2.fromOffset(pos.X, pos.Y + 8)
+                    obj.ui_dist.TextColor3 = dist.Color or Color3.new(1,1,1)
+                    pcall(function() if Library and Library.Font then obj.ui_dist.FontFace = Library.Font end end)
+                    obj.ui_dist.Visible = settings.dist == true
+                    dist.Visible = false
+                end
                 local _cl = os.clock()
                 if not plr._gun_cache_time or (_cl - plr._gun_cache_time) > 0.5 then
                     plr._gun_cache_time = _cl
@@ -7695,7 +7541,17 @@ cheat.EspLibrary = {} (function()
                 end
                 weapon.Text = plr._gun_cache_text or ""
                 weapon.Position = pos + Vector2.yAxis * (dist.TextBounds.Y + 10)
-                
+                if obj.ui_weapon then
+                    local wp = weapon.Position
+                    local ts = tonumber(main_settings.textSize) or 14
+                    obj.ui_weapon.Text = weapon.Text
+                    obj.ui_weapon.TextSize = ts
+                    obj.ui_weapon.Position = UDim2.fromOffset(wp.X, wp.Y)
+                    obj.ui_weapon.TextColor3 = weapon.Color or Color3.new(1,1,1)
+                    pcall(function() if Library and Library.Font then obj.ui_weapon.FontFace = Library.Font end end)
+                    obj.ui_weapon.Visible = settings.weapon == true and weapon.Text ~= ""
+                    weapon.Visible = false
+                end
                 dist.OutlineColor = settings.dist_outline_color
                 weapon.OutlineColor = settings.dist_outline_color
             end
@@ -7709,11 +7565,25 @@ cheat.EspLibrary = {} (function()
 
             -- Keep the health number visually tied to the projected health-bar
             -- size: close targets get larger text, distant targets get smaller text.
-            local projected_bar_height = math.max(5, math.abs(bar_start.Y - bar_end.Y))
-            healthtext.Size = math.clamp(projected_bar_height * 0.12, 8, 24)
+            local _ht_base = tonumber(main_settings.health_text_size) or tonumber(main_settings.textSize) or 12
+            local _ht_scale = math.clamp(120 / math.max(humanoid_distance, 20), 0.4, 1)
+            healthtext.Size = math.clamp(_ht_base * _ht_scale, 7, 18)
             healthtext.Position = bar_start - _Vector2new(healthtext.TextBounds.X + 5, healthtext.TextBounds.Y * 0.5)
             healthtext.Color = plr._esp_visible and _esp_green or settings.health_color_top:Lerp(settings.health_color_bottom, 1 - h_percent)
             healthtext.OutlineColor = settings.dist_outline_color
+            if obj.ui_health and settings.health then
+                local hp = healthtext.Position
+                local ts = tonumber(healthtext.Size) or 12
+                obj.ui_health.Text = healthtext.Text
+                obj.ui_health.TextSize = math.clamp(ts, 7, 18)
+                obj.ui_health.Position = UDim2.fromOffset(hp.X, hp.Y)
+                obj.ui_health.TextColor3 = healthtext.Color or Color3.new(1,1,1)
+                pcall(function() if Library and Library.Font then obj.ui_health.FontFace = Library.Font end end)
+                obj.ui_health.Visible = true
+                healthtext.Visible = false
+            elseif obj.ui_health then
+                obj.ui_health.Visible = false
+            end
             
             local min_healthbar_height = 5
             if (bar_start.Y - bar_end.Y) < min_healthbar_height then
@@ -7857,24 +7727,29 @@ cheat.EspLibrary = {} (function()
                 -- Material pass (throttled 0.5s)
                 if tick() - plr.last_chams_update >= 0.5 then
                     plr.chams_active = true
-                    for _, part in pairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            if not cham_original[part] then
-                                cham_original[part] = { Material = part.Material, Color = part.Color, Transparency = part.Transparency }
+                    local matName = settings.chams_material or "Highlight"
+                    if matName ~= "Highlight" then
+                        for _, part in pairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                if not cham_original[part] then
+                                    cham_original[part] = { Material = part.Material, Color = part.Color, Transparency = part.Transparency }
+                                end
+                                if matName == "Wireframe" then
+                                    part.Transparency = 0.99
+                                elseif matName == "Neon" then
+                                    part.Material = Enum.Material.SmoothPlastic
+                                    part.Color = settings.chams_fill_color[1]
+                                    part.Transparency = 0.5
+                                else
+                                    pcall(function()
+                                        part.Material = Enum.Material[matName]
+                                        part.Color = settings.chams_fill_color[1]
+                                        part.Transparency = 0
+                                    end)
+                                end
+                                local sa = part:FindFirstChildOfClass("SurfaceAppearance")
+                                if sa then sa:Destroy() end
                             end
-                            if settings.chams_material == "Wireframe" then
-                                part.Transparency = 0.99
-                            elseif settings.chams_material == "Neon" then
-                                part.Material    = Enum.Material.SmoothPlastic
-                                part.Color       = settings.chams_fill_color[1]
-                                part.Transparency = 0.5
-                            else
-                                part.Material    = Enum.Material[settings.chams_material or "Neon"]
-                                part.Color       = settings.chams_fill_color[1]
-                                part.Transparency = 0
-                            end
-                            local sa = part:FindFirstChildOfClass("SurfaceAppearance")
-                            if sa then sa:Destroy() end
                         end
                     end
                     plr.last_chams_update = tick()
@@ -7931,6 +7806,13 @@ cheat.EspLibrary = {} (function()
             if not corpse_settings.enabled then
                 return plr:togglevis(false)
             end
+            if corpse_settings.only_my_kills then
+                local nm = (espname or model.Name or ""):gsub("'s corpse",""):gsub(" corpse","")
+                local kills = cheat._my_kill_names or {}
+                if not (kills[nm] or kills[nm:lower()] or kills[model.Name]) then
+                    return plr:togglevis(false)
+                end
+            end
             
             local mainpart = get_mainpart(model, modelname)
             local worldPos = mainpart and mainpart.Position or model:GetPivot().Position
@@ -7958,16 +7840,16 @@ cheat.EspLibrary = {} (function()
     end
     local function destroy_esp(player)
         if not loaded_plrs[player] then return end
-        loaded_plrs[player].connection:Disconnect()
-        for i,v in loaded_plrs[player].obj do
-            v:Remove()
+        pcall(function() loaded_plrs[player].connection:Disconnect() end)
+        for _, v in pairs(loaded_plrs[player].obj) do
+            pcall(function()
+                if typeof(v) == "Instance" then v:Destroy()
+                elseif v and v.Remove then v:Remove()
+                elseif v and v.Visible ~= nil then v.Visible = false end
+            end)
         end
-        if loaded_plrs[player].chams_object then
-            loaded_plrs[player].chams_object:Destroy()
-        end
-        if loaded_plrs[player].outline_object then
-            loaded_plrs[player].outline_object:Destroy()
-        end
+        if loaded_plrs[player].chams_object then pcall(function() loaded_plrs[player].chams_object:Destroy() end) end
+        if loaded_plrs[player].outline_object then pcall(function() loaded_plrs[player].outline_object:Destroy() end) end
         loaded_plrs[player] = nil
     end
     function esp_table.load()
@@ -8701,32 +8583,28 @@ do
                     cheat.utility.new_hook(old_bullet, (function(old, self, ...)
                         local args      = {...}
                         local argCount  = select("#",...)
+                        local loadedammo, aimpart_index
+                        for i,v in args do
+                            if typeof(v)=="Instance" and v.Name=="AimPart" then aimpart_index=i end
+                            if type(v)=="string" then
+                                local tmp = ReplicatedStorage.AmmoTypes:FindFirstChild(v)
+                                if tmp then loadedammo=tmp end
+                            end
+                        end
+                        -- Tracers only (does not alter silent aim / instant / manipulation)
+                        if silent_aim.tracer and aimpart_index and args[aimpart_index] then
+                            local ap = args[aimpart_index]
+                            local tracer_origin = ap.Position
+                            if cheat.freecam_enabled then
+                                local char = LocalPlayer.Character
+                                local head = char and char:FindFirstChild("Head")
+                                if head then tracer_origin = head.Position end
+                            end
+                            local tracer_target = tracer_origin + ap.CFrame.LookVector * 10000
+                            pcall(spawn_bullet_tracer, tracer_origin, tracer_target)
+                        end
                         if silent_aim.enabled then
-                            local loadedammo, aimpart_index
-                            for i,v in args do
-                                if typeof(v)=="Instance" and v.Name=="AimPart" then aimpart_index=i end
-                                if type(v)=="string" then
-                                    local tmp = ReplicatedStorage.AmmoTypes:FindFirstChild(v)
-                                    if tmp then loadedammo=tmp end
-                                end
-                            end
                             if not (loadedammo and aimpart_index) then return old(self, unpack(args,1,argCount)) end
-                            -- Tracer: use the same origin/destination that the shot uses.
-                            if silent_aim.tracer then
-                                local tracer_origin = args[aimpart_index].Position
-                                if silent_aim.corner_shoot and silent_aim.manipulated_origin then
-                                    tracer_origin = silent_aim.manipulated_origin
-                                elseif cheat.freecam_enabled then
-                                    local char = LocalPlayer.Character
-                                    local head = char and char:FindFirstChild("Head")
-                                    if head then tracer_origin = head.Position end
-                                end
-                                local tracer_target = silent_aim.target_part and silent_aim.target_part.Position
-                                if not tracer_target then
-                                    tracer_target = tracer_origin + args[aimpart_index].CFrame.LookVector * 10000
-                                end
-                                spawn_bullet_tracer(tracer_origin, tracer_target)
-                            end
                             if silent_aim.instant then return old(self, unpack(args,1,argCount)) end
                             if not silent_aim.target_part then return old(self, unpack(args,1,argCount)) end
                             local real_aimpart = args[aimpart_index]
@@ -8760,7 +8638,10 @@ do
                     cheat.utility.new_hook(old_update, (function(old,...)
                         local args = {...}; local argCount = select("#",...)
                         if instantaim then args[1].AimInSpeed=0; args[1].AimOutSpeed=0 end
-                        if forceauto  then args[1].FireMode="Auto" end
+                        if forceauto then
+                            args[1].FireMode = "Auto"
+                            pcall(function() args[1].Auto = true end)
+                        end
                         if rapid_fire then args[1].FireRate=rapid_fire_delay end
                         return old(unpack(args,1,argCount))
                     end), true)
@@ -8999,11 +8880,6 @@ do
         end
         setnamecallmethod(methodstr); return __namecall(self, unpack(args,1,argCount))
     end)))
-    pcall(function()
-        cheat.hooks["__index"] = { instance = game, metamethod = "__index", func = __index }
-        cheat.hooks["__newindex"] = { instance = game, metamethod = "__newindex", func = __newindex }
-        cheat.hooks["__namecall"] = { instance = game, metamethod = "__namecall", func = __namecall }
-    end)
 end
 
 do
@@ -9825,7 +9701,7 @@ do
 
     -- Target Info: compact, professional, draggable target panel.
     local TargetInfoGui = Instance.new("ScreenGui")
-    TargetInfoGui.Name = "KnHookTargetInfo"
+    TargetInfoGui.Name = "TomboyTargetInfo"
     TargetInfoGui.ResetOnSpawn = false
     TargetInfoGui.IgnoreGuiInset = true
     TargetInfoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -10579,7 +10455,18 @@ do
         cheat.EspLibrary.main_settings.textFont = Library.FontDrawingMap[v] or Drawing.Fonts.Monospace
         cheat.EspLibrary.icaca()
     end })
-    ESPL:Slider({ Name="Font Size",         Flag="esp_fontsize",     Min=1,Max=30,Increment=1,Default=14, Callback=function(v) cheat.EspLibrary.main_settings.textSize=v; cheat.EspLibrary.icaca() end })
+    ESPL:Slider({ Name="Font Size",         Flag="esp_fontsize",     Min=1,Max=30,Increment=1,Default=14, Callback=function(v)
+        cheat.EspLibrary.main_settings.textSize=v
+        pcall(function()
+            local gui = (gethui and gethui() or game:GetService("CoreGui")):FindFirstChild("KnEspUiText")
+            if gui then for _,l in ipairs(gui:GetChildren()) do if l:IsA("TextLabel") then l.TextSize=v end end end
+        end)
+        cheat.EspLibrary.icaca()
+    end })
+    ESPL:Slider({ Name="Health Text Size", Flag="esp_healthtext_size", Min=7, Max=20, Increment=1, Default=12, Callback=function(v)
+        cheat.EspLibrary.main_settings.health_text_size = v
+        cheat.EspLibrary.icaca()
+    end })
     ESPL:Toggle({ Name="Infinite Range", Flag="esp_infinite", Callback=function(v)
         cheat.EspLibrary.main_settings.infiniterange = v
         if v then
@@ -10593,9 +10480,9 @@ do
         end
         cheat.EspLibrary.icaca()
     end })
-    ESPL:Slider({ Name="ESP Distance", Flag="esp_distance", Min=50, Max=1000, Increment=10, Default=400, Callback=function(v)
+    ESPL:Slider({ Name="ESP Distance", Flag="esp_distance", Min=50, Max=1667, Increment=10, Default=400, Suffix="m", Callback=function(v)
         if not cheat.EspLibrary.main_settings.infiniterange then
-            cheat.EspLibrary.main_settings.maxdistance = v * 3
+            cheat.EspLibrary.main_settings.maxdistance = math.min(5000, v * 3)
         end
         cheat.EspLibrary.main_settings.distancelimit = true
         cheat.EspLibrary.icaca()
@@ -10612,10 +10499,14 @@ do
     ESPL:Toggle({ Name="Text Outline",         Flag="esp_dist_outline", Callback=function(v) es.dist_outline=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_dist_outcol",   Default=Color3.new(0,0,0), Alpha=1,   Callback=function(v) es.dist_outline_color=v;     cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Weapon ESP",           Flag="esp_weapon",       Callback=function(v) es.weapon=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_wpcol",         Default=Color3.new(1,1,1), Alpha=1,   Callback=function(v) local f=Library.Flags.esp_wpcol;         es.weapon_color[1]=v;          es.weapon_color[2]=(f and f.Alpha or 1);           cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Skeleton",             Flag="esp_skeleton",     Callback=function(v) es.skeleton=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_skelcol",       Default=Color3.new(1,1,1), Alpha=1,   Callback=function(v) local f=Library.Flags.esp_skelcol;       es.skeleton_color[1]=v;        es.skeleton_color[2]=(f and f.Alpha or 1);         cheat.EspLibrary.icaca() end })
-    ESPL:Toggle({ Name="Chams",                Flag="esp_chams",        Callback=function(v) es.chams=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_chamscol",    Default=Color3.fromRGB(255,255,255), Alpha=0.7, Callback=function(v) local f=Library.Flags.esp_chamscol;    es.chams_fill_color[1]=v;   es.chams_fill_color[2]=(f and f.Alpha or 0.7); cheat.EspLibrary.icaca() end })
+    ESPL:Toggle({ Name="Chams",                Flag="esp_chams",        Callback=function(v) es.chams=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_chamscol",    Default=Color3.fromRGB(40,180,120), Alpha=0.45, Callback=function(v) local f=Library.Flags.esp_chamscol;    es.chams_fill_color[1]=v;   es.chams_fill_color[2]=(f and f.Alpha or 0.7); cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Chams Outline",        Flag="esp_chams_outline", Callback=function(v) es.chams_outline=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_chamsoutcol", Default=Color3.fromRGB(255,255,255), Alpha=0, Callback=function(v) local f=Library.Flags.esp_chamsoutcol; es.chamsoutline_color[1]=v; es.chamsoutline_color[2]=(f and f.Alpha or 0); cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Chams Visible Only",   Flag="esp_chams_vis",    Callback=function(v) es.chams_visible_only=v; cheat.EspLibrary.icaca() end })
-    ESPL:Dropdown({ Name="Chams Material",     Flag="esp_chams_mat",    Options={"Neon","ForceField","Glass","SmoothPlastic","Wireframe"}, Callback=function(v) es.chams_material=v; cheat.EspLibrary.icaca() end })
+    ESPL:Dropdown({ Name="Chams Material",     Flag="esp_chams_mat",    Options={"Highlight","Neon","ForceField","Glass","SmoothPlastic","Wireframe"}, Default="Highlight", Callback=function(v) es.chams_material=v; cheat.EspLibrary.icaca() end })
+    ESPL:Slider({ Name="Chams Transparency", Flag="esp_chams_trans", Min=0, Max=100, Increment=1, Default=45, Suffix="%", Callback=function(v)
+        es.chams_fill_color[2] = math.clamp(v/100, 0, 0.99)
+        cheat.EspLibrary.icaca()
+    end })
     ESPL:Toggle({ Name="Rainbow Chams",        Flag="esp_chams_rainbow", Callback=function(v) es.chams_rainbow=v end })
     ESPL:Toggle({ Name="Pulse Chams",          Flag="esp_chams_pulse",   Callback=function(v) es.chams_pulse=v end })
     ESPL:Toggle({ Name="Visible Split Chams",  Flag="esp_chams_split",   Callback=function(v) es.chams_visible_split=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="esp_chams_occ_col", Default=Color3.fromRGB(255,50,50), Alpha=0.5, Callback=function(v) local f=Library.Flags.esp_chams_occ_col; es.chams_occluded_color[1]=v; es.chams_occluded_color[2]=(f and f.Alpha or 0.5); cheat.EspLibrary.icaca() end })
@@ -10729,24 +10620,44 @@ do
         end)
     end
 
+    local boss_last_pos = {}
     local function findBoss(name)
-        local found = false
-        local displayName = BossDisplay[name] or name
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Model") and string.lower(obj.Name) == string.lower(name) then
-                local hum = obj:FindFirstChildOfClass("Humanoid")
-                local hp = hum and hum.Health or obj:GetAttribute("Health")
-                if hp == nil or tonumber(hp) > 0 then
-                    found = true
-                    break
+        local lname = string.lower(name)
+        local function check(obj)
+            if not obj or not obj:IsA("Model") then return false end
+            if string.lower(obj.Name) ~= lname then return false end
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            local hp = hum and hum.Health or obj:GetAttribute("Health")
+            if hp ~= nil and tonumber(hp) <= 0 then return false end
+            local pp = obj.PrimaryPart or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")
+            if pp then boss_last_pos[name] = pp.Position end
+            return true
+        end
+        local direct = workspace:FindFirstChild(name, true)
+        if direct and check(direct) then return true end
+        for _, root in ipairs({
+            workspace:FindFirstChild("AiZones"), workspace:FindFirstChild("AI"),
+            workspace:FindFirstChild("Bots"), workspace:FindFirstChild("NPCs"),
+            workspace:FindFirstChild("Bosses"), workspace
+        }) do
+            if root then
+                for _, obj in ipairs(root:GetDescendants()) do
+                    if check(obj) then return true end
                 end
             end
         end
-        return found
+        return false
     end
 
     local function scanBosses()
         ensureBossPanel()
+        pcall(function()
+            for _, pos in pairs(boss_last_pos or {}) do
+                if typeof(pos)=="Vector3" then
+                    pcall(function() LocalPlayer:RequestStreamAroundAsync(pos, 200) end)
+                end
+            end
+        end)
         for _, name in ipairs(BossNames) do
             local alive = false
             pcall(function() alive = findBoss(name) end)
@@ -10782,19 +10693,8 @@ do
 
     -- Boss status is per-name only. Never infer a boss from generic HP values,
     -- otherwise one 400-HP NPC can incorrectly mark every boss as alive.
-    local oldFindBoss = findBoss
-    findBoss = function(name)
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Model") and string.lower(obj.Name) == string.lower(name) then
-                local hum = obj:FindFirstChildOfClass("Humanoid")
-                local hp = hum and hum.Health or tonumber(obj:GetAttribute("Health"))
-                if hp == nil or tonumber(hp) > 0 then return true end
-            end
-        end
-        return false
-    end
-
     local BossCat = MiscPage:Section({Name="Bosses", Side=2})
+
     BossCat:Toggle({Name="Boss Checklist", Flag="boss_checklist", Default=false, Callback=setBossChecklist})
 
     -- Keep the panel text synchronized with the language dropdown.
@@ -10817,6 +10717,7 @@ do
     CrpL:Toggle({ Name="Show Name",       Flag="cesp_name",     Default=true, Callback=function(v) es.name=v; cheat.EspLibrary.icaca() end })
     CrpL:Toggle({ Name="Show Distance",   Flag="cesp_dist",     Callback=function(v) es.distance=v; cheat.EspLibrary.icaca() end })
     CrpL:Toggle({ Name="Outline",         Flag="cesp_outline",  Callback=function(v) es.outline=v; cheat.EspLibrary.icaca() end }):Colorpicker({ Flag="cesp_outcol", Default=Color3.new(0,0,0), Alpha=0, Callback=function(v) es.outline_color=v; cheat.EspLibrary.icaca() end })
+    CrpL:Toggle({ Name="Only My Kills",   Flag="cesp_only_mine", Default=false, Callback=function(v) es.only_my_kills=v; cheat.EspLibrary.icaca() end })
 end
 
 do
@@ -12479,7 +12380,7 @@ do
     -- My Profile: compact floating/draggable local-player statistics.
     -- ================================================================
     local profile_gui = Instance.new("ScreenGui")
-    profile_gui.Name = "KnHookMyProfile"
+    profile_gui.Name = "TomboyMyProfile"
     profile_gui.ResetOnSpawn = false
     profile_gui.IgnoreGuiInset = true
     profile_gui.Enabled = false
@@ -13269,6 +13170,408 @@ end
 
 cheat.EspLibrary.load()
 Library.Holder.Instance.Enabled = true
+
+-- ================================================================
+-- Kn.Hook Premium restored features (no silent-aim / manip / FOV changes)
+-- Map/DAGR, Pass Doors, Overlays, Safe Mode, Force Auto heartbeat
+-- ================================================================
+do
+    -- Force Auto continuous (gun mod only)
+    cheat.utility.new_heartbeat(function()
+        if not forceauto then return end
+        pcall(function()
+            local rp = ReplicatedStorage:FindFirstChild("Players")
+            local pdata = rp and rp:FindFirstChild(LocalPlayer.Name)
+            local inv = pdata and pdata:FindFirstChild("Inventory")
+            local st = pdata and pdata:FindFirstChild("Status")
+            local gv = st and st:FindFirstChild("GameplayVariables")
+            local eq = gv and (gv:GetAttribute("EquippedTool") or gv:GetAttribute("EquippedWeapon"))
+            local wname = typeof(eq)=="Instance" and eq.Name or (type(eq)=="string" and eq or nil)
+            if inv and wname then
+                local w = inv:FindFirstChild(wname)
+                local props = w and w:FindFirstChild("ItemProperties")
+                if props then pcall(function() props:SetAttribute("FireMode","Auto") end) end
+            end
+        end)
+    end)
+
+    -- Kill tracking for Only My Kills
+    pcall(function()
+        local function watch(plr, char)
+            local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+            if not hum then return end
+            hum.Died:Connect(function()
+                if silent_aim and silent_aim.target_part and silent_aim.target_part.Parent == char then
+                    cheat._my_kill_names = cheat._my_kill_names or {}
+                    cheat._my_kill_names[plr.Name] = true
+                    cheat._my_kill_names[plr.Name:lower()] = true
+                end
+            end)
+        end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                if plr.Character then watch(plr, plr.Character) end
+                plr.CharacterAdded:Connect(function(c) watch(plr, c) end)
+            end
+        end
+        Players.PlayerAdded:Connect(function(plr)
+            plr.CharacterAdded:Connect(function(c) watch(plr, c) end)
+        end)
+    end)
+
+    -- Session join times
+    do
+        cheat._player_join_time = cheat._player_join_time or {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            cheat._player_join_time[plr.UserId] = cheat._player_join_time[plr.UserId] or tick()
+        end
+        Players.PlayerAdded:Connect(function(plr) cheat._player_join_time[plr.UserId] = tick() end)
+        Players.PlayerRemoving:Connect(function(plr) cheat._player_join_time[plr.UserId] = nil end)
+    end
+
+    -- MAP / DAGR
+    local MapCat = MiscPage:Section({ Name = "Map / DAGR", Side = 2 })
+    local map_spoof, dagr_spoof, map_markers = false, false, false
+    local map_marker_dist = 500
+
+    local function ensure_item_spoof(item_name)
+        local pd = ReplicatedStorage:FindFirstChild("Players") and ReplicatedStorage.Players:FindFirstChild(LocalPlayer.Name)
+        if not pd then return end
+        pcall(function()
+            pd:SetAttribute("Has"..item_name, true)
+            pd:SetAttribute(item_name.."Unlocked", true)
+        end)
+        local st = pd:FindFirstChild("Status")
+        if st then
+            pcall(function() st:SetAttribute("Has"..item_name, true) end)
+            local gv = st:FindFirstChild("GameplayVariables")
+            if gv then pcall(function() gv:SetAttribute("Has"..item_name, true) end) end
+        end
+        local gear = pd:FindFirstChild("KnUnlocks")
+        if not gear then gear = Instance.new("Folder"); gear.Name="KnUnlocks"; gear.Parent=pd end
+        if not gear:FindFirstChild(item_name) then
+            local v = Instance.new("BoolValue"); v.Name=item_name; v.Value=true; v.Parent=gear
+        end
+    end
+
+    cheat.utility.new_heartbeat(function()
+        if map_spoof then pcall(ensure_item_spoof, "Map") end
+        if dagr_spoof then pcall(ensure_item_spoof, "DAGR") end
+    end)
+
+    MapCat:Toggle({ Name="Spoof Map Unlock", Flag="spoof_map", Callback=function(v)
+        map_spoof=v; if v then ensure_item_spoof("Map") end
+        Library:Notification(v and "Map spoof ON (reopen map)" or "Map spoof OFF", 3)
+    end})
+    MapCat:Toggle({ Name="Spoof DAGR Unlock", Flag="spoof_dagr", Callback=function(v)
+        dagr_spoof=v; if v then ensure_item_spoof("DAGR") end
+        Library:Notification(v and "DAGR spoof ON" or "DAGR spoof OFF", 3)
+    end})
+
+    local radar_gui = Instance.new("ScreenGui")
+    radar_gui.Name="KnMapMarkers"; radar_gui.ResetOnSpawn=false; radar_gui.IgnoreGuiInset=true; radar_gui.Enabled=false
+    pcall(function() radar_gui.Parent=(gethui and gethui()) or game:GetService("CoreGui") end)
+    local radar_frame = Instance.new("Frame")
+    radar_frame.Size=UDim2.fromOffset(220,220); radar_frame.Position=UDim2.new(1,-240,0,80)
+    radar_frame.BackgroundColor3=Color3.fromRGB(12,14,18); radar_frame.BackgroundTransparency=0.2
+    radar_frame.BorderSizePixel=0; radar_frame.Parent=radar_gui
+    Instance.new("UICorner", radar_frame).CornerRadius=UDim.new(0,8)
+    local radar_pool = {}
+    local function get_marker(plr)
+        if radar_pool[plr] then return radar_pool[plr] end
+        local dot=Instance.new("Frame"); dot.Size=UDim2.fromOffset(8,8); dot.AnchorPoint=Vector2.new(0.5,0.5)
+        dot.BorderSizePixel=0; dot.Parent=radar_frame; Instance.new("UICorner",dot).CornerRadius=UDim.new(1,0)
+        local icon=Instance.new("ImageLabel"); icon.Size=UDim2.fromOffset(18,18); icon.AnchorPoint=Vector2.new(0.5,0.5)
+        icon.BackgroundTransparency=1; icon.Parent=radar_frame; Instance.new("UICorner",icon).CornerRadius=UDim.new(1,0)
+        local label=Instance.new("TextLabel"); label.BackgroundTransparency=1; label.Size=UDim2.fromOffset(90,28)
+        label.AnchorPoint=Vector2.new(0.5,0); label.TextSize=10; label.TextColor3=Color3.fromRGB(230,230,240)
+        label.TextStrokeTransparency=0.4; label.Parent=radar_frame
+        pcall(function() if Library and Library.Font then label.FontFace=Library.Font end end)
+        task.spawn(function() pcall(function()
+            icon.Image=Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+        end) end)
+        radar_pool[plr]={dot=dot,icon=icon,label=label}
+        return radar_pool[plr]
+    end
+    MapCat:Toggle({ Name="Player Map Markers", Flag="map_markers", Callback=function(v)
+        map_markers=v; radar_gui.Enabled=v
+        if not v then for _,m in pairs(radar_pool) do m.dot.Visible=false; m.icon.Visible=false; m.label.Visible=false end end
+    end})
+    MapCat:Slider({ Name="Marker Distance", Flag="map_marker_dist", Min=50, Max=1600, Increment=10, Default=500, Suffix="m", Callback=function(v) map_marker_dist=v end })
+
+    cheat.utility.new_renderstepped(function()
+        if not map_markers then return end
+        local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not my then return end
+        local cx, cy = radar_frame.AbsoluteSize.X*0.5, radar_frame.AbsoluteSize.Y*0.5+8
+        local scale = (math.min(radar_frame.AbsoluteSize.X, radar_frame.AbsoluteSize.Y)*0.42)/math.max(map_marker_dist,1)
+        local seen = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health>0 then
+                local meters = (hrp.Position-my.Position).Magnitude/3
+                if meters <= map_marker_dist then
+                    seen[plr]=true
+                    local m=get_marker(plr)
+                    local offset=hrp.Position-my.Position
+                    local look=my.CFrame.LookVector
+                    local flat=Vector3.new(look.X,0,look.Z)
+                    if flat.Magnitude<0.05 then flat=Vector3.new(0,0,-1) else flat=flat.Unit end
+                    local right=Vector3.new(flat.Z,0,-flat.X)
+                    local lx, lz = offset:Dot(right)/3, offset:Dot(flat)/3
+                    local px, py = cx+lx*scale, cy-lz*scale
+                    local is_me = plr==LocalPlayer
+                    m.dot.BackgroundColor3 = is_me and Color3.fromRGB(255,60,60) or Color3.fromRGB(80,200,120)
+                    m.dot.Position=UDim2.fromOffset(px,py)
+                    m.icon.Position=UDim2.fromOffset(px,py-14)
+                    m.label.Position=UDim2.fromOffset(px,py+6)
+                    m.label.Text=string.format("%s\n%.0fm", plr.Name, meters)
+                    m.label.TextColor3 = is_me and Color3.fromRGB(255,100,100) or Color3.fromRGB(230,230,240)
+                    m.dot.Visible=true; m.icon.Visible=true; m.label.Visible=true
+                end
+            end
+        end
+        for plr,m in pairs(radar_pool) do
+            if not seen[plr] then m.dot.Visible=false; m.icon.Visible=false; m.label.Visible=false end
+        end
+    end)
+
+    -- PASS DOORS
+    local DoorCat = MiscPage:Section({ Name = "Doors", Side = 2 })
+    local pass_door_enabled, pass_door_busy = false, false
+    local pass_door_range, pass_door_steps, pass_door_step_size, pass_door_step_wait = 12, 18, 0.22, 0.035
+    local function find_nearby_door_prompt()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        local best, best_d, best_part = nil, pass_door_range, nil
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") then
+                local parent=obj.Parent
+                local part=parent and (parent:IsA("BasePart") and parent or parent:FindFirstChildWhichIsA("BasePart"))
+                if part then
+                    local n=(part.Name.." "..(parent and parent.Name or "").." "..(obj.ActionText or "").." "..(obj.ObjectText or "")):lower()
+                    if n:find("door",1,true) or n:find("gate",1,true) or n:find("lock",1,true) or n:find("open",1,true) then
+                        local d=(part.Position-root.Position).Magnitude
+                        if d<best_d then best,best_d,best_part=obj,d,part end
+                    end
+                end
+            end
+        end
+        return best, best_part, root
+    end
+    local function try_pass_door()
+        if pass_door_busy then return end
+        pass_door_busy=true
+        pcall(function()
+            local prompt, part, root = find_nearby_door_prompt()
+            if not (prompt and part and root) then
+                Library:Notification("No door nearby", 2); return
+            end
+            local to_door = (part.Position-root.Position)
+            local dir = part.CFrame.LookVector
+            if to_door.Magnitude>0.05 and dir:Dot(to_door.Unit)<0 then dir=-dir end
+            local fired=false
+            for i=1, pass_door_steps do
+                if not pass_door_enabled and i>1 then break end
+                root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if not root then break end
+                root.CFrame = root.CFrame + dir * pass_door_step_size
+                task.wait(pass_door_step_wait)
+                if prompt and prompt.Parent then
+                    pcall(function()
+                        if fireproximityprompt then fireproximityprompt(prompt,1)
+                        else prompt:InputHoldBegin(); task.wait(0.05); prompt:InputHoldEnd() end
+                    end)
+                    fired=true; task.wait(0.15); break
+                end
+            end
+            pcall(function()
+                root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if root then root.CFrame = root.CFrame - dir * (pass_door_step_size*2) end
+            end)
+            Library:Notification(fired and "Door prompt fired" or "Pass Door done", 2)
+        end)
+        pass_door_busy=false
+    end
+    DoorCat:Toggle({ Name="Pass Doors Auto", Flag="pass_doors", Callback=function(v) pass_door_enabled=v end })
+    DoorCat:Slider({ Name="Pass Door Range", Flag="pass_door_range", Min=4, Max=25, Default=12, Callback=function(v) pass_door_range=v end })
+    DoorCat:Button({ Name="Pass Nearest Door", Callback=function() task.spawn(try_pass_door) end })
+    cheat.utility.new_heartbeat(function()
+        if not pass_door_enabled or pass_door_busy then return end
+        local prompt, part, root = find_nearby_door_prompt()
+        if prompt and part and root and (part.Position-root.Position).Magnitude<=6 then
+            task.spawn(try_pass_door)
+        end
+    end)
+
+    -- OVERLAYS
+    local OvCat = VisualsPage:Section({ Name = "Overlays", Side = 2 })
+    local ov = { ammo=false, danger=false, danger_m=50, session=false, snap=false, offscreen=false, zone=false, mine=false, killfeed=false, dmg=false, inv_peek=false, spectator=false, hours=false }
+    local ov_gui = Instance.new("ScreenGui"); ov_gui.Name="KnOverlays"; ov_gui.ResetOnSpawn=false; ov_gui.IgnoreGuiInset=true
+    pcall(function() ov_gui.Parent=(gethui and gethui()) or game:GetService("CoreGui") end)
+    local function ov_label(sz)
+        local l=Instance.new("TextLabel"); l.BackgroundTransparency=1; l.AnchorPoint=Vector2.new(0.5,0.5)
+        l.Size=UDim2.fromOffset(280,sz or 18); l.TextSize=sz or 14; l.TextStrokeTransparency=0; l.Visible=false; l.Parent=ov_gui
+        pcall(function() if Library and Library.Font then l.FontFace=Library.Font end end)
+        return l
+    end
+    local ammo_lbl, danger_lbl, session_lbl, zone_lbl, mine_lbl = ov_label(20), ov_label(16), ov_label(14), ov_label(15), ov_label(14)
+    danger_lbl.TextColor3=Color3.fromRGB(255,80,80); mine_lbl.TextColor3=Color3.fromRGB(255,120,50)
+    local snap = Drawing.new("Line"); snap.Thickness=1.2; snap.Visible=false
+    local off_arrows={}
+    for i=1,8 do off_arrows[i]=Drawing.new("Triangle"); off_arrows[i].Filled=true; off_arrows[i].Visible=false; off_arrows[i].Color=Color3.fromRGB(255,200,80) end
+    local session_start = tick()
+
+    OvCat:Toggle({Name="Ammo Counter", Flag="ov_ammo", Callback=function(v) ov.ammo=v; if not v then ammo_lbl.Visible=false end end})
+    OvCat:Toggle({Name="Danger Nearby", Flag="ov_danger", Callback=function(v) ov.danger=v; if not v then danger_lbl.Visible=false end end})
+    OvCat:Slider({Name="Danger Radius", Flag="ov_danger_m", Min=10, Max=150, Default=50, Suffix="m", Callback=function(v) ov.danger_m=v end})
+    OvCat:Toggle({Name="Session Stats", Flag="ov_session", Callback=function(v) ov.session=v; if not v then session_lbl.Visible=false end end})
+    OvCat:Toggle({Name="Target Snapline", Flag="ov_snap", Callback=function(v) ov.snap=v; snap.Visible=false end})
+    OvCat:Toggle({Name="Offscreen Arrows", Flag="ov_offscreen", Callback=function(v) ov.offscreen=v end})
+    OvCat:Toggle({Name="Zone Name", Flag="ov_zone", Callback=function(v) ov.zone=v; if not v then zone_lbl.Visible=false end end})
+    OvCat:Toggle({Name="Mine/Trap Warning", Flag="ov_mine", Callback=function(v) ov.mine=v; if not v then mine_lbl.Visible=false end end})
+    OvCat:Toggle({Name="Custom Kill Feed", Flag="ov_killfeed", Callback=function(v) ov.killfeed=v end})
+    OvCat:Toggle({Name="Damage Numbers", Flag="ov_dmg", Callback=function(v) ov.dmg=v end})
+    OvCat:Toggle({Name="Inventory Peek", Flag="ov_inv_peek", Callback=function(v) ov.inv_peek=v end})
+    OvCat:Toggle({Name="Spectator Count", Flag="ov_spectator", Callback=function(v) ov.spectator=v end})
+    OvCat:Toggle({Name="Account Hours (Target)", Flag="ov_hours", Callback=function(v) ov.hours=v end})
+
+    local function read_ammo()
+        local rp=ReplicatedStorage:FindFirstChild("Players")
+        local pdata=rp and rp:FindFirstChild(LocalPlayer.Name)
+        local inv=pdata and pdata:FindFirstChild("Inventory")
+        local gv=pdata and pdata:FindFirstChild("Status") and pdata.Status:FindFirstChild("GameplayVariables")
+        local eq=gv and (gv:GetAttribute("EquippedTool") or gv:GetAttribute("EquippedWeapon"))
+        local wname=typeof(eq)=="Instance" and eq.Name or (type(eq)=="string" and eq or nil)
+        if not (inv and wname) then return end
+        local w=inv:FindFirstChild(wname); if not w then return wname,"?","?" end
+        local mag=w:FindFirstChild("Attachments") and w.Attachments:FindFirstChild("Magazine")
+        local magv=mag and mag:FindFirstChildOfClass("StringValue")
+        local props=magv and magv:FindFirstChild("ItemProperties")
+        local loaded=props and props:FindFirstChild("LoadedAmmo")
+        local count=0
+        if loaded then
+            if loaded:IsA("Folder") then count=#loaded:GetChildren()
+            else count=loaded:GetAttribute("LoadedAmmo") or loaded:GetAttribute("Ammo") or 0 end
+        end
+        local maxa=props and (props:GetAttribute("MaxLoadedAmmo") or props:GetAttribute("Capacity")) or "?"
+        return wname, count, maxa
+    end
+
+    cheat.utility.new_renderstepped(function()
+        local cam=workspace.CurrentCamera; if not cam then return end
+        local vp=cam.ViewportSize
+        local ts=(cheat.EspLibrary and cheat.EspLibrary.main_settings and cheat.EspLibrary.main_settings.textSize) or 14
+        if ov.ammo then
+            local w,c,m=read_ammo()
+            if w then
+                ammo_lbl.TextSize=ts+4; ammo_lbl.Text=string.format("%s  [%s/%s]", w, tostring(c), tostring(m))
+                ammo_lbl.Position=UDim2.fromOffset(vp.X*0.5, vp.Y-48); ammo_lbl.Visible=true
+            else ammo_lbl.Visible=false end
+        end
+        if ov.danger then
+            local my=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local closest,cd=nil,math.huge
+            if my then
+                for _,plr in ipairs(Players:GetPlayers()) do
+                    if plr~=LocalPlayer and plr.Character then
+                        local hrp=plr.Character:FindFirstChild("HumanoidRootPart")
+                        local hum=plr.Character:FindFirstChildOfClass("Humanoid")
+                        if hrp and hum and hum.Health>0 then
+                            local d=(hrp.Position-my.Position).Magnitude/3
+                            if d<cd then closest,cd=plr,d end
+                        end
+                    end
+                end
+            end
+            if closest and cd<=(ov.danger_m or 50) then
+                danger_lbl.TextSize=ts; danger_lbl.Text=string.format("DANGER  %s  [%.0fm]", closest.Name, cd)
+                danger_lbl.Position=UDim2.fromOffset(vp.X*0.5, 96); danger_lbl.Visible=true
+            else danger_lbl.Visible=false end
+        end
+        if ov.session then
+            session_lbl.TextSize=ts; session_lbl.Text=string.format("Session  %.1f min", (tick()-session_start)/60)
+            session_lbl.Position=UDim2.fromOffset(12, vp.Y-28); session_lbl.AnchorPoint=Vector2.new(0,0); session_lbl.Visible=true
+        end
+        if ov.snap and silent_aim and silent_aim.target_part then
+            local sp,on=cam:WorldToViewportPoint(silent_aim.target_part.Position)
+            if on and sp.Z>0 then
+                snap.From=Vector2.new(vp.X*0.5,vp.Y*0.5); snap.To=Vector2.new(sp.X,sp.Y); snap.Visible=true
+            else snap.Visible=false end
+        else snap.Visible=false end
+        for i=1,#off_arrows do off_arrows[i].Visible=false end
+        if ov.offscreen then
+            local ai=0
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr~=LocalPlayer and plr.Character then
+                    local hrp=plr.Character:FindFirstChild("HumanoidRootPart")
+                    local hum=plr.Character:FindFirstChildOfClass("Humanoid")
+                    if hrp and hum and hum.Health>0 then
+                        local sp,on=cam:WorldToViewportPoint(hrp.Position)
+                        if (not on) or sp.Z<=0 then
+                            ai+=1; if ai>#off_arrows then break end
+                            local dir=Vector2.new(sp.X-vp.X*0.5, sp.Y-vp.Y*0.5)
+                            if dir.Magnitude<1 then dir=Vector2.new(0,-1) end; dir=dir.Unit
+                            local edge=Vector2.new(vp.X*0.5,vp.Y*0.5)+dir*(math.min(vp.X,vp.Y)*0.42)
+                            local tri=off_arrows[ai]; local perp=Vector2.new(-dir.Y,dir.X)*8
+                            tri.PointA=edge+dir*10; tri.PointB=edge-dir*6+perp; tri.PointC=edge-dir*6-perp; tri.Visible=true
+                        end
+                    end
+                end
+            end
+        end
+        if ov.zone then
+            local zname
+            pcall(function()
+                local pd=ReplicatedStorage.Players:FindFirstChild(LocalPlayer.Name)
+                local gv=pd and pd.Status and pd.Status:FindFirstChild("GameplayVariables")
+                if gv then zname=gv:GetAttribute("Zone") or gv:GetAttribute("CurrentZone") or gv:GetAttribute("Location") end
+            end)
+            if zname and tostring(zname)~="" then
+                zone_lbl.Text="Zone: "..tostring(zname); zone_lbl.TextSize=ts
+                zone_lbl.Position=UDim2.fromOffset(vp.X*0.5,48); zone_lbl.Visible=true
+            else zone_lbl.Visible=false end
+        end
+        if ov.mine then
+            local my=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local hit=false
+            if my then
+                for _,obj in ipairs(workspace:GetChildren()) do
+                    local n=string.lower(obj.Name)
+                    if n:find("mine",1,true) or n:find("ied",1,true) or n:find("trap",1,true) or n:find("claymore",1,true) then
+                        local p=obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+                        if p and (p.Position-my.Position).Magnitude<60 then
+                            hit=true; mine_lbl.Text=string.format("TRAP NEARBY  [%.0fm]", (p.Position-my.Position).Magnitude/3); break
+                        end
+                    end
+                end
+            end
+            mine_lbl.TextSize=ts; mine_lbl.Position=UDim2.fromOffset(vp.X*0.5,120); mine_lbl.Visible=hit
+        end
+    end)
+
+    -- Safe Mode
+    local SafeCat = SettingsPage:Section({ Name = "Safety", Side = 1 })
+    SafeCat:Toggle({
+        Name = "Safe Mode",
+        Flag = "cfg_safe_mode",
+        Default = false,
+        Callback = function(v)
+            if not v then return end
+            pcall(function()
+                if silent_aim then
+                    silent_aim.instant=false
+                    silent_aim.corner_shoot=false
+                    silent_aim.tracer=false
+                end
+                Library:Notification("Safe Mode: high-risk combat options disabled", 4)
+            end)
+        end
+    })
+    SafeCat:Label("Disables Instant / Manipulation / Tracers when enabled")
+end
+
 Library:Notification("Kn.Hook Premium loaded. Welcome.", 5)
 
 -- ================================================================
@@ -13325,7 +13628,7 @@ task.spawn(function()
             end
 
             -- Remove Visor (safe): uses the known-working implementation.
-            local visor_saved = setmetatable({}, { __mode = "k" })
+            local visor_saved = {}
             local visor_descendant_connection
             local visor_enabled = false
 
@@ -13371,13 +13674,27 @@ task.spawn(function()
                     if obj and obj.Parent then
                         pcall(function()
                             if state.kind == "gui" and obj:IsA("GuiObject") then
-                                obj.Visible = state.value
+                                obj.Visible = state.value ~= nil and state.value or true
                             elseif state.kind == "post" and obj:IsA("PostEffect") then
-                                obj.Enabled = state.value
+                                obj.Enabled = state.value ~= nil and state.value or true
                             end
                         end)
                     end
                     visor_saved[obj] = nil
+                end
+                local cam = workspace.CurrentCamera
+                local pg = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                for _, root in ipairs({cam, pg}) do
+                    if root then
+                        for _, obj in ipairs(root:GetDescendants()) do
+                            if visor_candidate(obj) then
+                                pcall(function()
+                                    if obj:IsA("GuiObject") then obj.Visible = true end
+                                    if obj:IsA("PostEffect") then obj.Enabled = true end
+                                end)
+                            end
+                        end
+                    end
                 end
             end
 
@@ -13508,29 +13825,91 @@ task.spawn(function()
             -- These controls only call an implementation if the running game exposes
             -- the corresponding function; otherwise they safely notify the user.
             local UtilitySection = MiscPage:Section({Name="Advanced Utilities", Side=1})
-            local function KN_optional(name)
-                local env=getgenv()
-                local fn=env and env["KN_"..name]
-                if type(fn)=="function" then
-                    pcall(fn)
-                    return true
-                end
-                local f=env and env[name]
-                if type(f)=="function" then pcall(f) return true end
-                return false
+            local function get_pdata()
+                local rp = ReplicatedStorage:FindFirstChild("Players")
+                return rp and rp:FindFirstChild(LocalPlayer.Name)
             end
-            local function KN_button(label, key)
-                UtilitySection:Button({Name=label, Callback=function()
-                    if not KN_optional(key) then
-                        Library:Notification(label.." is unavailable in this game version.",3,Color3.fromRGB(255,180,80))
+            local function get_inv()
+                local pd = get_pdata()
+                return pd and pd:FindFirstChild("Inventory")
+            end
+            local function get_remote(name)
+                local rem = ReplicatedStorage:FindFirstChild("Remotes")
+                return rem and (rem:FindFirstChild(name) or rem:FindFirstChild(name, true))
+            end
+            UtilitySection:Button({Name="Dump Inventory to Storage", Callback=function()
+                local ok = pcall(function()
+                    local inv, move = get_inv(), get_remote("InventoryMove") or get_remote("MoveItem")
+                    if not inv then error("no inv") end
+                    local n=0
+                    for _, it in ipairs(inv:GetChildren()) do
+                        if move then
+                            pcall(function()
+                                if move:IsA("RemoteEvent") then move:FireServer(it, "Storage")
+                                else move:InvokeServer(it, "Storage") end
+                            end); n+=1
+                        end
                     end
-                end})
-            end
-            KN_button("Dump Backpack to Storage","DumpBackpack")
-            KN_button("Dump Inventory to Storage","DumpInventory")
-            KN_button("Sort Container","SortStorage")
-            KN_button("Auto Armor","AutoArmor")
-            KN_button("Teleport BTR","TeleportBTR")
+                    Library:Notification("Dump attempted on "..n.." items", 3)
+                end)
+                if not ok then Library:Notification("Dump failed", 3, Color3.fromRGB(255,180,80)) end
+            end})
+            UtilitySection:Button({Name="Dump Backpack to Storage", Callback=function()
+                pcall(function()
+                    local inv, move = get_inv(), get_remote("InventoryMove")
+                    if not inv or not move then Library:Notification("Unavailable", 3, Color3.fromRGB(255,180,80)) return end
+                    for _, it in ipairs(inv:GetChildren()) do
+                        pcall(function()
+                            if move:IsA("RemoteEvent") then move:FireServer(it, "Backpack", "Storage")
+                            else move:InvokeServer(it, "Backpack", "Storage") end
+                        end)
+                    end
+                    Library:Notification("Backpack dump attempted", 2)
+                end)
+            end})
+            UtilitySection:Button({Name="Auto Armor", Callback=function()
+                local ok=pcall(function()
+                    local inv=get_inv(); local equip=get_remote("EquipItem") or get_remote("Equip")
+                    if not inv then error("no inv") end
+                    for _, it in ipairs(inv:GetChildren()) do
+                        local props=it:FindFirstChild("ItemProperties")
+                        local itype=props and props:GetAttribute("ItemType")
+                        if itype and tostring(itype):lower():find("armor") and equip then
+                            pcall(function()
+                                if equip:IsA("RemoteEvent") then equip:FireServer(it) else equip:InvokeServer(it) end
+                            end)
+                        end
+                    end
+                    Library:Notification("Auto Armor attempted", 2)
+                end)
+                if not ok then Library:Notification("Auto Armor unavailable", 3, Color3.fromRGB(255,180,80)) end
+            end})
+            UtilitySection:Button({Name="Teleport BTR", Callback=function()
+                local ok=pcall(function()
+                    local root=LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if not root then error("no char") end
+                    local target
+                    for _, m in ipairs(workspace:GetDescendants()) do
+                        if m:IsA("Model") and (m.Name:lower():find("btr") or m.Name:lower():find("apc")) then
+                            local p=m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
+                            if p then target=p; break end
+                        end
+                    end
+                    if not target then error("no BTR") end
+                    root.CFrame = target.CFrame + Vector3.new(0,5,0)
+                    Library:Notification("Teleported near BTR", 2)
+                end)
+                if not ok then Library:Notification("BTR not found", 3, Color3.fromRGB(255,180,80)) end
+            end})
+            UtilitySection:Button({Name="Sort Container", Callback=function()
+                pcall(function()
+                    local sort=get_remote("SortStorage") or get_remote("SortContainer")
+                    if sort then
+                        if sort:IsA("RemoteEvent") then sort:FireServer() else sort:InvokeServer() end
+                        Library:Notification("Sort requested", 2)
+                    else Library:Notification("Sort remote not found", 3, Color3.fromRGB(255,180,80)) end
+                end)
+            end})
         
             local ExploitSection = MiscPage:Section({Name="Vehicle / Hazard", Side=2})
             local function KN_toggle(label,key)
