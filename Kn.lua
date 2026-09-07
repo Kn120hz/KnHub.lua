@@ -6109,21 +6109,6 @@ do
                 end)
             end })
             SettingsSection:Toggle({
-                Name = "Performance Panel",
-                Flag = "cfg_perf_panel",
-                Default = false,
-                Callback = function(Value)
-                    pcall(function()
-                        local gui = getgenv().KN_PerformanceHUD
-                        if not gui or not gui.Parent then
-                            local parent = (gethui and gethui()) or game:GetService("CoreGui")
-                            gui = parent:FindFirstChild("KN_PerformanceHUD")
-                        end
-                        if gui then gui.Enabled = Value == true end
-                    end)
-                end
-            })
-            SettingsSection:Toggle({
                 Name = "Watermark",
                 Flag = "Watermark",
                 Default = false,
@@ -6951,36 +6936,6 @@ cheat.EspLibrary = {} (function()
     local lplr = plrs.LocalPlayer
     local success, coregui = pcall(game.GetService, game, "CoreGui")
     local container = Instance.new("Folder", (success and coregui:FindFirstChild("RobloxGui")) or lplr:WaitForChild("PlayerGui", 2) or lplr)
-    -- Smallest Pixel cannot bind to Drawing API — use ScreenGui TextLabels with FontFace
-    local esp_ui_gui = Instance.new("ScreenGui")
-    esp_ui_gui.Name = "KnEspUiText"
-    esp_ui_gui.ResetOnSpawn = false
-    esp_ui_gui.IgnoreGuiInset = true
-    pcall(function()
-        esp_ui_gui.Parent = (success and coregui) or lplr:FindFirstChildOfClass("PlayerGui") or lplr
-    end)
-    local function apply_esp_font(lbl)
-        pcall(function()
-            if Library and Library.Font then
-                lbl.FontFace = Library.Font
-            end
-        end)
-    end
-    function make_ui_text()
-        local lbl = Instance.new("TextLabel")
-        lbl.BackgroundTransparency = 1
-        lbl.AnchorPoint = Vector2.new(0.5, 0.5)
-        lbl.Size = UDim2.new(0, 280, 0, 22)
-        lbl.TextSize = 14
-        lbl.TextColor3 = Color3.new(1,1,1)
-        lbl.TextStrokeTransparency = 0
-        lbl.TextStrokeColor3 = Color3.new(0,0,0)
-        lbl.Visible = false
-        lbl.Parent = esp_ui_gui
-        apply_esp_font(lbl)
-        return lbl
-    end
-
     esp_table = {
         __loaded = false,
         main_settings = {
@@ -7185,10 +7140,6 @@ cheat.EspLibrary = {} (function()
                 health_bar_cap_bottom = esp.create_obj("Circle", { Visible = false, Filled = true, ZIndex = 2 }),
                 dist = esp.create_obj("Text", { Center = true, Visible = false }),
                 weapon = esp.create_obj("Text", { Center = true, Visible = false }),
-                ui_name = make_ui_text(),
-                ui_dist = make_ui_text(),
-                ui_weapon = make_ui_text(),
-                ui_health = make_ui_text(),
             },
             chams_object = Instance.new("Highlight", container),
             outline_object = Instance.new("Highlight", container),
@@ -7337,12 +7288,7 @@ cheat.EspLibrary = {} (function()
             if setvis_cache ~= bool then
                 setvis_cache = bool
                 if not bool then
-                        for _, v in pairs(obj) do
-                            pcall(function() if v and v.Visible ~= nil then v.Visible = false end end)
-                        end
-                        for _, key in ipairs({"ui_name","ui_dist","ui_weapon","ui_health"}) do
-                            pcall(function() if obj[key] then obj[key].Visible = false end end)
-                        end
+                        for _, v in obj do v.Visible = false end
                         cham.Enabled = false
                         outline.Enabled = false
                 else
@@ -7446,17 +7392,10 @@ cheat.EspLibrary = {} (function()
             plr.last_health = humanoid_health
             
             if humanoid_health <= 0 then
-                -- Keep crashed MI24 / vehicle wrecks visible on ESP
-                local keep_wreck = isnpc and (character.Name == "MI24V" or character.Name == "BTR80"
-                    or string.find(string.lower(character.Name), "mi24", 1, true)
-                    or string.find(string.lower(character.Name), "heli", 1, true))
-                if not keep_wreck then
-                    if not plr.was_dead then
-                        plr.was_dead = true
-                    end
-                    return plr:togglevis(false)
+                if not plr.was_dead then
+                    plr.was_dead = true
                 end
-                plr.was_dead = true
+                return plr:togglevis(false)
             else
                 plr.was_dead = false
             end
@@ -7503,33 +7442,12 @@ cheat.EspLibrary = {} (function()
                 local _team_mark = (not isnpc) and silent_aim and ((silent_aim.native_whitelist and silent_aim.native_whitelist[player.Name]) or (silent_aim.whitelist_mode and silent_aim.whitelist and silent_aim.whitelist[player.Name]))
                 realname.Text = isnpc and ("BOT | " .. player.Name) or (player.Name .. (_team_mark and " [TEAM]" or ""))
                 realname.OutlineColor = settings.dist_outline_color
-                if obj.ui_name then
-                    local p = realname.Position
-                    local ts = tonumber(main_settings.textSize) or 14
-                    obj.ui_name.Text = realname.Text
-                    obj.ui_name.TextSize = ts
-                    obj.ui_name.Position = UDim2.fromOffset(p.X, p.Y)
-                    obj.ui_name.TextColor3 = realname.Color or Color3.new(1,1,1)
-                    apply_esp_font(obj.ui_name)
-                    obj.ui_name.Visible = settings.realname == true
-                    realname.Visible = false
-                end
             end
             do
                 local pos = (corners.bottomLeft + corners.bottomRight) * 0.5
                 dist.Text = mathround(humanoid_distance / 3) .. "m"
                 -- Put distance slightly below the bottom of the character/box.
                 dist.Position = pos + _Vector2new(0, 8)
-                if obj.ui_dist then
-                    local ts = tonumber(main_settings.textSize) or 14
-                    obj.ui_dist.Text = dist.Text
-                    obj.ui_dist.TextSize = ts
-                    obj.ui_dist.Position = UDim2.fromOffset(pos.X, pos.Y + 8)
-                    obj.ui_dist.TextColor3 = dist.Color or Color3.new(1,1,1)
-                    apply_esp_font(obj.ui_dist)
-                    obj.ui_dist.Visible = settings.dist == true
-                    dist.Visible = false
-                end
                 local _cl = os.clock()
                 if not plr._gun_cache_time or (_cl - plr._gun_cache_time) > 0.5 then
                     plr._gun_cache_time = _cl
@@ -7537,17 +7455,6 @@ cheat.EspLibrary = {} (function()
                 end
                 weapon.Text = plr._gun_cache_text or ""
                 weapon.Position = pos + Vector2.yAxis * (dist.TextBounds.Y + 10)
-                if obj.ui_weapon then
-                    local wp = weapon.Position
-                    local ts = tonumber(main_settings.textSize) or 14
-                    obj.ui_weapon.Text = weapon.Text
-                    obj.ui_weapon.TextSize = ts
-                    obj.ui_weapon.Position = UDim2.fromOffset(wp.X, wp.Y)
-                    obj.ui_weapon.TextColor3 = weapon.Color or Color3.new(1,1,1)
-                    apply_esp_font(obj.ui_weapon)
-                    obj.ui_weapon.Visible = settings.weapon == true and weapon.Text ~= ""
-                    weapon.Visible = false
-                end
                 
                 dist.OutlineColor = settings.dist_outline_color
                 weapon.OutlineColor = settings.dist_outline_color
@@ -7567,19 +7474,6 @@ cheat.EspLibrary = {} (function()
             healthtext.Position = bar_start - _Vector2new(healthtext.TextBounds.X + 5, healthtext.TextBounds.Y * 0.5)
             healthtext.Color = plr._esp_visible and _esp_green or settings.health_color_top:Lerp(settings.health_color_bottom, 1 - h_percent)
             healthtext.OutlineColor = settings.dist_outline_color
-            if obj.ui_health and settings.health then
-                local hp = healthtext.Position
-                local ts = tonumber(healthtext.Size) or tonumber(main_settings.textSize) or 12
-                obj.ui_health.Text = healthtext.Text
-                obj.ui_health.TextSize = math.clamp(ts, 6, 18)
-                obj.ui_health.Position = UDim2.fromOffset(hp.X, hp.Y)
-                obj.ui_health.TextColor3 = healthtext.Color or Color3.new(1,1,1)
-                apply_esp_font(obj.ui_health)
-                obj.ui_health.Visible = true
-                healthtext.Visible = false
-            elseif obj.ui_health then
-                obj.ui_health.Visible = false
-            end
             
             local min_healthbar_height = 5
             if (bar_start.Y - bar_end.Y) < min_healthbar_height then
@@ -8270,7 +8164,6 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
                         end
                         if not is_heli and (npcs.Name=="MI24V" or npcs.Name=="BTR80") then continue end
                         local humanoid = npcs:FindFirstChildOfClass("Humanoid")
-                        -- is_heli stays valid even at 0 HP (crashed MI24 wreck)
                         if part and (is_heli or (humanoid and humanoid.Health>0)) then
                             if (Camera.CFrame.p-part.Position).Magnitude < 2500 then
                                 local position, onscreen = Camera:WorldToViewportPoint(part.Position)
@@ -9039,9 +8932,7 @@ do
         gui.ResetOnSpawn = false
         gui.IgnoreGuiInset = true
         gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        gui.Enabled = false -- default OFF; enable from Settings
         gui.Parent = parent
-        getgenv().KN_PerformanceHUD = gui
 
         local frame = Instance.new("Frame")
         frame.Name = "Panel"
@@ -10512,24 +10403,7 @@ do
         cheat.EspLibrary.main_settings.textFont = Library.FontDrawingMap[v] or Drawing.Fonts.Monospace
         cheat.EspLibrary.icaca()
     end })
-    ESPL:Slider({ Name="Font Size", Flag="esp_fontsize", Min=1, Max=30, Increment=1, Default=14, Callback=function(v)
-        cheat.EspLibrary.main_settings.textSize = v
-        pcall(function()
-            local parent = (gethui and gethui()) or game:GetService("CoreGui")
-            for _, name in ipairs({"KnEspUiText", "KnCarEspUi", "KnExtractUi"}) do
-                local gui = parent:FindFirstChild(name)
-                if gui then
-                    for _, lbl in ipairs(gui:GetChildren()) do
-                        if lbl:IsA("TextLabel") then
-                            lbl.TextSize = v
-                            if Library and Library.Font then lbl.FontFace = Library.Font end
-                        end
-                    end
-                end
-            end
-        end)
-        cheat.EspLibrary.icaca()
-    end })
+    ESPL:Slider({ Name="Font Size",         Flag="esp_fontsize",     Min=1,Max=30,Increment=1,Default=14, Callback=function(v) cheat.EspLibrary.main_settings.textSize=v; cheat.EspLibrary.icaca() end })
     ESPL:Toggle({ Name="Infinite Range", Flag="esp_infinite", Callback=function(v)
         cheat.EspLibrary.main_settings.infiniterange = v
         if v then
@@ -11386,25 +11260,6 @@ do
     local extract_highlights = {}
     local extract_labels     = {}
     local extract_watch_conn = nil
-    local extract_ui_gui
-    pcall(function()
-        extract_ui_gui = Instance.new("ScreenGui")
-        extract_ui_gui.Name = "KnExtractUi"
-        extract_ui_gui.ResetOnSpawn = false
-        extract_ui_gui.IgnoreGuiInset = true
-        extract_ui_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
-    end)
-    local function extract_ui_label()
-        local lbl = Instance.new("TextLabel")
-        lbl.BackgroundTransparency = 1
-        lbl.AnchorPoint = Vector2.new(0.5, 0.5)
-        lbl.Size = UDim2.fromOffset(180, 18)
-        lbl.TextStrokeTransparency = 0
-        lbl.Visible = false
-        lbl.Parent = extract_ui_gui
-        pcall(function() if Library and Library.Font then lbl.FontFace = Library.Font end end)
-        return lbl
-    end
 
     local extract_color = Color3.fromRGB(255, 220, 0)
 
@@ -11431,7 +11286,7 @@ do
             Text    = "Extraction",
             Color   = extract_color,
             Size    = cheat.EspLibrary.main_settings.textSize,
-            Font    = cheat.EspLibrary.main_settings.textFont, -- Drawing fallback; UI overlay uses Smallest Pixel
+            Font    = cheat.EspLibrary.main_settings.textFont,
             Center  = true,
             Outline = true,
             OutlineColor = Color3.new(0,0,0),
@@ -11448,7 +11303,7 @@ do
             OutlineColor = Color3.new(0,0,0),
             ZIndex  = 5,
         })
-        extract_labels[obj] = {part=part, name=name_draw, dist=dist_draw, ui_name=extract_ui_label(), ui_dist=extract_ui_label()}
+        extract_labels[obj] = {part=part, name=name_draw, dist=dist_draw}
     end
 
     local function clear_extractions()
@@ -11456,8 +11311,6 @@ do
         for _, t  in pairs(extract_labels) do
             pcall(function() t.name:Remove() end)
             pcall(function() t.dist:Remove() end)
-            pcall(function() if t.ui_name then t.ui_name:Destroy() end end)
-            pcall(function() if t.ui_dist then t.ui_dist:Destroy() end end)
         end
         extract_highlights = {}
         extract_labels     = {}
@@ -11487,18 +11340,12 @@ do
         for _, t in pairs(extract_labels) do
             pcall(function()
                 if not (t.part and t.part.Parent) then
-                    t.name.Visible = false; t.dist.Visible = false
-                    if t.ui_name then t.ui_name.Visible = false end
-                    if t.ui_dist then t.ui_dist.Visible = false end
-                    return
+                    t.name.Visible = false; t.dist.Visible = false; return
                 end
                 local top_pos = t.part.Position + Vector3.new(0, t.part.Size.Y / 2 + 0.3, 0)
                 local screen, vis = cam:WorldToViewportPoint(top_pos)
                 if not vis or screen.Z <= 0 then
-                    t.name.Visible = false; t.dist.Visible = false
-                    if t.ui_name then t.ui_name.Visible = false end
-                    if t.ui_dist then t.ui_dist.Visible = false end
-                    return
+                    t.name.Visible = false; t.dist.Visible = false; return
                 end
                 local sz = ms.textSize
                 local fn = ms.textFont
@@ -11506,29 +11353,13 @@ do
                 t.name.Position    = Vector2.new(sx, sy)
                 t.name.Size        = sz
                 t.name.Font        = fn
-                t.name.Visible     = false -- Drawing hidden; Smallest Pixel via UI
+                t.name.Visible     = true
                 local dist = math.floor((t.part.Position - hrp.Position).Magnitude)
                 t.dist.Text        = dist .. "m"
                 t.dist.Position    = Vector2.new(sx, sy + sz + 1)
                 t.dist.Size        = sz
                 t.dist.Font        = fn
-                t.dist.Visible     = false
-                if t.ui_name then
-                    t.ui_name.Text = t.name.Text or "Extraction"
-                    t.ui_name.TextSize = sz
-                    t.ui_name.Position = UDim2.fromOffset(sx, sy)
-                    t.ui_name.TextColor3 = extract_color
-                    pcall(function() if Library and Library.Font then t.ui_name.FontFace = Library.Font end end)
-                    t.ui_name.Visible = true
-                end
-                if t.ui_dist then
-                    t.ui_dist.Text = dist .. "m"
-                    t.ui_dist.TextSize = sz
-                    t.ui_dist.Position = UDim2.fromOffset(sx, sy + sz + 1)
-                    t.ui_dist.TextColor3 = extract_color
-                    pcall(function() if Library and Library.Font then t.ui_dist.FontFace = Library.Font end end)
-                    t.ui_dist.Visible = true
-                end
+                t.dist.Visible     = true
             end)
         end
     end)
@@ -11548,25 +11379,6 @@ do
     local car_esp_color   = Color3.fromRGB(255, 165, 0)
     local car_esp_objs    = {}  -- [model] = {part, name, dist}
 
-    local car_ui_gui
-    pcall(function()
-        car_ui_gui = Instance.new("ScreenGui")
-        car_ui_gui.Name = "KnCarEspUi"
-        car_ui_gui.ResetOnSpawn = false
-        car_ui_gui.IgnoreGuiInset = true
-        car_ui_gui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
-    end)
-    local function car_ui_label()
-        local lbl = Instance.new("TextLabel")
-        lbl.BackgroundTransparency = 1
-        lbl.AnchorPoint = Vector2.new(0.5, 0.5)
-        lbl.Size = UDim2.fromOffset(160, 18)
-        lbl.TextStrokeTransparency = 0
-        lbl.Visible = false
-        lbl.Parent = car_ui_gui
-        pcall(function() if Library and Library.Font then lbl.FontFace = Library.Font end end)
-        return lbl
-    end
     local function car_esp_add(model)
         if car_esp_objs[model] then return end
         local part = model.PrimaryPart or model:FindFirstChildOfClass("BasePart")
@@ -11583,7 +11395,7 @@ do
             Font=cheat.EspLibrary.main_settings.textFont,
             Center=true, Outline=true, OutlineColor=Color3.new(0,0,0), ZIndex=5,
         })
-        car_esp_objs[model] = {part=part, name=nd, dist=dd, ui_name=car_ui_label(), ui_dist=car_ui_label()}
+        car_esp_objs[model] = {part=part, name=nd, dist=dd}
     end
 
     local function car_esp_clear()
@@ -11632,8 +11444,6 @@ do
             pcall(function()
                 if not model or not model.Parent then
                     t.name:Remove(); t.dist:Remove()
-                    pcall(function() if t.ui_name then t.ui_name:Destroy() end end)
-                    pcall(function() if t.ui_dist then t.ui_dist:Destroy() end end)
                     car_esp_objs[model] = nil
                     return
                 end
@@ -11644,8 +11454,6 @@ do
                 if not vis or screen.Z <= 0 then
                     t.name.Visible = false
                     t.dist.Visible = false
-                    if t.ui_name then t.ui_name.Visible = false end
-                    if t.ui_dist then t.ui_dist.Visible = false end
                     return
                 end
                 local d = math.floor((pos3 - lp_pos).Magnitude / 2.8)
@@ -11655,25 +11463,6 @@ do
                 t.name.Font     = fn
                 t.name.Visible  = true
                 t.dist.Position = Vector2.new(screen.X, screen.Y - 6)
-                -- Smallest Pixel via UI labels
-                if t.ui_name then
-                    t.ui_name.Text = t.name.Text
-                    t.ui_name.TextSize = fs or 14
-                    t.ui_name.Position = UDim2.fromOffset(screen.X, screen.Y - 20)
-                    t.ui_name.TextColor3 = car_esp_color
-                    pcall(function() if Library and Library.Font then t.ui_name.FontFace = Library.Font end end)
-                    t.ui_name.Visible = true
-                    t.name.Visible = false
-                end
-                if t.ui_dist then
-                    t.ui_dist.Text = t.dist.Text
-                    t.ui_dist.TextSize = (fs or 14) - 2
-                    t.ui_dist.Position = UDim2.fromOffset(screen.X, screen.Y - 6)
-                    t.ui_dist.TextColor3 = car_esp_color
-                    pcall(function() if Library and Library.Font then t.ui_dist.FontFace = Library.Font end end)
-                    t.ui_dist.Visible = true
-                    t.dist.Visible = false
-                end
                 t.dist.Text     = d .. "m"
                 t.dist.Size     = fs - 2
                 t.dist.Font     = fn
@@ -13419,84 +13208,192 @@ do
     end
 
     MD:Toggle({ Name="ESP Map (All Players)", Flag="esp_map_jiggy", Callback=function(v)
+        cheat._esp_map_feature = v == true
         if not v then
             esp_map_active = false
             esp_map_token += 1
             pcall(function()
                 local mapFrame, root = get_map_frame()
                 if mapFrame and mapFrame:FindFirstChild("Markers") then
-                    for _, c in ipairs(mapFrame.Markers:GetChildren()) do pcall(function() c:Destroy() end) end
+                    for _, c in ipairs(mapFrame.Markers:GetChildren()) do
+                        if c.Name:find("KnMap_", 1, true) or c.Name == "KnSelfMarker" or c.Name == "SelfMarker" then
+                            pcall(function() c:Destroy() end)
+                        end
+                    end
                 end
                 table.clear(esp_map_markers)
-                if root then root.Visible = false end
+                if cheat._map_float_btn then cheat._map_float_btn.Visible = false end
             end)
             return
         end
-        local mapFrame, root, mainGui = get_map_frame()
-        if not mapFrame or not mapFrame:FindFirstChild("MarkerDotTemplate") then
-            Library:Notification("MapFrame not ready", 3, Color3.fromRGB(255,180,80))
-            return
-        end
-        esp_map_active = true
-        esp_map_token += 1
-        local token = esp_map_token
-        pcall(function()
-            mapFrame.Size = UDim2.fromScale(1,1)
-            mapFrame.Position = UDim2.new(0.5,0,0.49,0)
-            if root then root.Visible = true end
-            if mainGui and mainGui:FindFirstChild("ModalButton") then mainGui.ModalButton.Modal = true end
 
-            -- Spoof "owns map item" so the game shows the real Close button
-            local function spoof_has_map()
+        -- Continuous map ownership spoof so the GAME map button (top-right) stays visible
+        local function spoof_has_map()
+            pcall(function()
                 local pd = ReplicatedStorage:FindFirstChild("Players") and ReplicatedStorage.Players:FindFirstChild(LocalPlayer.Name)
                 if not pd then return end
-                pcall(function()
-                    pd:SetAttribute("HasMap", true)
-                    pd:SetAttribute("MapUnlocked", true)
-                    pd:SetAttribute("Map", true)
-                end)
+                pd:SetAttribute("HasMap", true)
+                pd:SetAttribute("MapUnlocked", true)
+                pd:SetAttribute("Map", true)
                 local st = pd:FindFirstChild("Status")
                 if st then
-                    pcall(function()
-                        st:SetAttribute("HasMap", true)
-                        st:SetAttribute("Map", true)
-                    end)
+                    st:SetAttribute("HasMap", true)
+                    st:SetAttribute("Map", true)
                     local gv = st:FindFirstChild("GameplayVariables")
                     if gv then
-                        pcall(function()
-                            gv:SetAttribute("HasMap", true)
-                            gv:SetAttribute("MapEquipped", true)
-                        end)
+                        gv:SetAttribute("HasMap", true)
+                        gv:SetAttribute("MapEquipped", true)
                     end
                 end
+                -- Also force the game toolbar map button visible if we can find it
+                local pg = LocalPlayer:FindFirstChild("PlayerGui")
+                local mg = pg and pg:FindFirstChild("MainGui")
+                if mg then
+                    for _, obj in ipairs(mg:GetDescendants()) do
+                        local n = string.lower(tostring(obj.Name or ""))
+                        if (n:find("map", 1, true) or n:find("dagr", 1, true)) and (obj:IsA("GuiButton") or obj:IsA("ImageButton") or obj:IsA("ImageLabel")) then
+                            -- only toolbar-sized icons, not the full MapFrame
+                            local sz = obj.AbsoluteSize
+                            if sz.X > 0 and sz.X < 80 and sz.Y > 0 and sz.Y < 80 then
+                                pcall(function() obj.Visible = true end)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        spoof_has_map()
+
+        local function get_avatar(plr)
+            local ok, img = pcall(function()
+                return Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
+            end)
+            return ok and img or ""
+        end
+
+        local function ensure_markers()
+            local mapFrame = select(1, get_map_frame())
+            if not mapFrame or not mapFrame:FindFirstChild("Markers") then return end
+            local markersFolder = mapFrame.Markers
+            local template = mapFrame:FindFirstChild("MarkerDotTemplate")
+
+            local function make_marker(plr, is_self)
+                -- Prefer cloning template so it follows map scaling; then restyle with avatar
+                local m
+                if template then
+                    m = template:Clone()
+                else
+                    m = Instance.new("ImageLabel")
+                    m.BackgroundTransparency = 1
+                    m.Size = UDim2.fromOffset(22, 22)
+                    m.AnchorPoint = Vector2.new(0.5, 0.5)
+                end
+                m.Name = is_self and "KnSelfMarker" or ("KnMap_" .. plr.Name)
+                m.Visible = true
+                m.Parent = markersFolder
+
+                -- Avatar image
+                local avatar = m:FindFirstChild("KnAvatar")
+                if not avatar then
+                    -- If template is already an ImageLabel, use it as avatar base
+                    if m:IsA("ImageLabel") or m:IsA("ImageButton") then
+                        avatar = m
+                    else
+                        avatar = Instance.new("ImageLabel")
+                        avatar.Name = "KnAvatar"
+                        avatar.BackgroundTransparency = 1
+                        avatar.Size = UDim2.fromScale(1, 1)
+                        avatar.Parent = m
+                    end
+                end
+                pcall(function()
+                    if avatar:IsA("ImageLabel") or avatar:IsA("ImageButton") then
+                        avatar.Image = get_avatar(plr)
+                        avatar.ImageColor3 = Color3.new(1, 1, 1)
+                        avatar.ScaleType = Enum.ScaleType.Fit
+                    end
+                end)
+                -- Round avatar
+                if not avatar:FindFirstChildOfClass("UICorner") then
+                    local c = Instance.new("UICorner")
+                    c.CornerRadius = UDim.new(1, 0)
+                    c.Parent = avatar
+                end
+                -- Ring color: self red, others enemy red-ish
+                local stroke = avatar:FindFirstChild("KnStroke") or Instance.new("UIStroke")
+                stroke.Name = "KnStroke"
+                stroke.Thickness = 2
+                stroke.Color = is_self and Color3.fromRGB(255, 60, 60) or Color3.fromRGB(227, 36, 36)
+                stroke.Parent = avatar
+
+                -- Label under marker: [ME] or name + distance
+                local lab = m:FindFirstChild("KnLabel")
+                if not lab then
+                    lab = m:FindFirstChild("TextLabel") or m:FindFirstChildWhichIsA("TextLabel", true)
+                end
+                if not lab then
+                    lab = Instance.new("TextLabel")
+                    lab.Name = "KnLabel"
+                    lab.BackgroundTransparency = 1
+                    lab.Size = UDim2.fromOffset(80, 28)
+                    lab.Position = UDim2.fromScale(0.5, 1)
+                    lab.AnchorPoint = Vector2.new(0.5, 0)
+                    lab.TextSize = 10
+                    lab.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    lab.TextStrokeTransparency = 0.3
+                    lab.Parent = m
+                end
+                lab.Name = "KnLabel"
+                lab.Visible = true
+                lab.Text = is_self and "[ME]" or plr.Name
+                pcall(function() if Library and Library.Font then lab.FontFace = Library.Font end end)
+
+                return m
+            end
+
+            -- Self always
+            if not (esp_map_markers.Me and esp_map_markers.Me.m and esp_map_markers.Me.m.Parent) then
+                esp_map_markers.Me = { p = LocalPlayer, m = make_marker(LocalPlayer, true), is_self = true }
+            end
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    local key = plr.Name
+                    if not (esp_map_markers[key] and esp_map_markers[key].m and esp_map_markers[key].m.Parent) then
+                        esp_map_markers[key] = { p = plr, m = make_marker(plr, false), is_self = false }
+                    end
+                end
+            end
+        end
+
+        local function open_map_ui()
+            local mapFrame, root, mainGui = get_map_frame()
+            if not mapFrame then
+                Library:Notification("MapFrame not ready — wait a moment", 3, Color3.fromRGB(255,180,80))
+                return false
             end
             spoof_has_map()
-
-            -- Force any Close / Exit controls under MapFrame to be visible & clickable
-            local function force_close_buttons(container)
-                if not container then return end
-                for _, obj in ipairs(container:GetDescendants()) do
+            pcall(function()
+                mapFrame.Size = UDim2.fromScale(1, 1)
+                mapFrame.Position = UDim2.new(0.5, 0, 0.49, 0)
+                if root then root.Visible = true end
+                if mainGui and mainGui:FindFirstChild("ModalButton") then
+                    mainGui.ModalButton.Modal = true
+                end
+                UserInputService.MouseIconEnabled = true
+            end)
+            -- Force close controls visible
+            pcall(function()
+                for _, obj in ipairs((root or mapFrame):GetDescendants()) do
                     local n = string.lower(tostring(obj.Name or ""))
-                    local is_close = n:find("close", 1, true) or n:find("exit", 1, true) or n == "x"
-                        or n:find("hide", 1, true) or n:find("dismiss", 1, true)
-                    if is_close and (obj:IsA("GuiButton") or obj:IsA("TextButton") or obj:IsA("ImageButton") or obj:IsA("ImageLabel") or obj:IsA("TextLabel") or obj:IsA("Frame")) then
-                        pcall(function()
+                    if n:find("close", 1, true) or n:find("exit", 1, true) or n == "x" then
+                        if obj:IsA("GuiObject") then
                             obj.Visible = true
-                            if obj:IsA("GuiObject") then
-                                obj.Active = true
-                                if obj.BackgroundTransparency and obj.BackgroundTransparency >= 1 and obj:IsA("GuiButton") then
-                                    -- keep transparent but active
-                                end
-                            end
-                        end)
+                            obj.Active = true
+                        end
                     end
                 end
-            end
-            force_close_buttons(root)
-            force_close_buttons(mapFrame)
-            if mainGui then force_close_buttons(mainGui:FindFirstChild("MapFrame")) end
-
-            -- Fallback: our own close button if the game never creates one without the item
+            end)
+            -- Fallback close button
             if root and not root:FindFirstChild("KnMapCloseBtn") then
                 local btn = Instance.new("TextButton")
                 btn.Name = "KnMapCloseBtn"
@@ -13511,79 +13408,155 @@ do
                 btn.Parent = root
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
                 btn.MouseButton1Click:Connect(function()
-                    pcall(function()
-                        if Library.SetFlags and Library.SetFlags["esp_map_jiggy"] then
-                            Library.SetFlags["esp_map_jiggy"](false)
-                        else
-                            root.Visible = false
-                            esp_map_active = false
-                        end
-                    end)
+                    pcall(function() if root then root.Visible = false end end)
+                    esp_map_active = false
+                    if cheat._map_float_btn then cheat._map_float_btn.Text = "MAP" end
                 end)
-            elseif root and root:FindFirstChild("KnMapCloseBtn") then
-                root.KnMapCloseBtn.Visible = true
+            end
+            ensure_markers()
+            esp_map_active = true
+            return true
+        end
+
+        local function close_map_ui()
+            esp_map_active = false
+            pcall(function()
+                local _, root = get_map_frame()
+                if root then root.Visible = false end
+            end)
+            if cheat._map_float_btn then cheat._map_float_btn.Text = "MAP" end
+        end
+
+        -- Floating MAP button (open/close without opening the menu)
+        pcall(function()
+            if not cheat._map_float_gui then
+                local fg = Instance.new("ScreenGui")
+                fg.Name = "KnMapFloatBtn"
+                fg.ResetOnSpawn = false
+                fg.IgnoreGuiInset = true
+                fg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                pcall(function() fg.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+                local btn = Instance.new("TextButton")
+                btn.Name = "FloatMap"
+                btn.Size = UDim2.fromOffset(52, 52)
+                btn.Position = UDim2.new(1, -70, 0.5, -26)
+                btn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+                btn.TextColor3 = Color3.fromRGB(255, 220, 120)
+                btn.Text = "MAP"
+                btn.Font = Enum.Font.GothamBold
+                btn.TextSize = 14
+                btn.Parent = fg
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+                local st = Instance.new("UIStroke", btn)
+                st.Color = Color3.fromRGB(255, 200, 80)
+                st.Thickness = 1.5
+                -- drag
+                local dragging, dragStart, startPos
+                btn.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        dragging = true
+                        dragStart = input.Position
+                        startPos = btn.Position
+                        input.Changed:Connect(function()
+                            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                        end)
+                    end
+                end)
+                UserInputService.InputChanged:Connect(function(input)
+                    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        local d = input.Position - dragStart
+                        btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+                    end
+                end)
+                btn.MouseButton1Click:Connect(function()
+                    if not cheat._esp_map_feature then return end
+                    local _, root = get_map_frame()
+                    local open = root and root.Visible
+                    if open then
+                        close_map_ui()
+                    else
+                        if open_map_ui() then
+                            btn.Text = "CLOSE"
+                        end
+                    end
+                end)
+                cheat._map_float_gui = fg
+                cheat._map_float_btn = btn
+            end
+            cheat._map_float_btn.Visible = true
+            cheat._map_float_btn.Text = "MAP"
+        end)
+
+        -- Open once on enable
+        open_map_ui()
+        if cheat._map_float_btn then cheat._map_float_btn.Text = "CLOSE" end
+
+        esp_map_token += 1
+        local token = esp_map_token
+        task.spawn(function()
+            while cheat._esp_map_feature and token == esp_map_token do
+                spoof_has_map()
+                -- Always keep markers on the REAL MapFrame (whether opened by us or game button)
+                local mf, root = get_map_frame()
+                local mapImg = get_map_image(mf)
+                local map_visible = root and root.Visible
+                if map_visible then
+                    esp_map_active = true
+                    ensure_markers()
+                    if mf and mapImg then
+                        local mypos = get_wpos(LocalPlayer)
+                        for key, d in pairs(esp_map_markers) do
+                            local plr = d.p
+                            if not plr or not plr.Parent then
+                                pcall(function() if d.m then d.m:Destroy() end end)
+                                esp_map_markers[key] = nil
+                            else
+                                local w = get_wpos(plr)
+                                if w and d.m then
+                                    d.m.Position = world_to_map(mapImg, w)
+                                    d.m.Visible = true
+                                    local lab = d.m:FindFirstChild("KnLabel") or d.m:FindFirstChildWhichIsA("TextLabel", true)
+                                    if lab then
+                                        if d.is_self or plr == LocalPlayer then
+                                            lab.Text = "[ME]"
+                                            lab.TextColor3 = Color3.fromRGB(255, 100, 100)
+                                        else
+                                            local meters = mypos and ((w - mypos).Magnitude / 3) or 0
+                                            lab.Text = string.format("%s\n%.0fm", plr.Name, meters)
+                                            lab.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                        end
+                                        lab.Visible = true
+                                    end
+                                elseif d.m then
+                                    d.m.Visible = false
+                                end
+                            end
+                        end
+                    end
+                    if cheat._map_float_btn then cheat._map_float_btn.Text = "CLOSE" end
+                else
+                    if cheat._map_float_btn then cheat._map_float_btn.Text = "MAP" end
+                end
+                task.wait(0.12)
             end
         end)
 
-        -- Escape closes the forced map
+        -- Escape closes map UI
         pcall(function()
             if not cheat._map_esc_conn then
                 cheat._map_esc_conn = UserInputService.InputBegan:Connect(function(input, gp)
                     if gp then return end
-                    if not esp_map_active then return end
+                    if not cheat._esp_map_feature then return end
                     if input.KeyCode == Enum.KeyCode.Escape then
-                        if Library.SetFlags and Library.SetFlags["esp_map_jiggy"] then
-                            Library.SetFlags["esp_map_jiggy"](false)
-                        end
+                        close_map_ui()
                     end
                 end)
             end
         end)
-        for _, c in ipairs(mapFrame.Markers:GetChildren()) do pcall(function() c:Destroy() end) end
-        table.clear(esp_map_markers)
-        local function mk(plr, self)
-            local m = mapFrame.MarkerDotTemplate:Clone()
-            m.Visible = true
-            if m:IsA("ImageLabel") or m:IsA("ImageButton") then
-                m.ImageColor3 = self and Color3.fromRGB(255,60,60) or Color3.fromRGB(227,36,36)
-            end
-            local lab = m:FindFirstChild("TextLabel") or m:FindFirstChildWhichIsA("TextLabel", true)
-            if lab then lab.Visible = true; lab.Text = self and "YOU" or plr.Name end
-            m.Parent = mapFrame.Markers
-            return m
-        end
-        esp_map_markers.Me = {p=LocalPlayer, m=mk(LocalPlayer,true)}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then esp_map_markers[plr.Name] = {p=plr, m=mk(plr,false)} end
-        end
-        task.spawn(function()
-            while esp_map_active and token == esp_map_token do
-                local mf = select(1, get_map_frame())
-                local mapImg = get_map_image(mf)
-                if mf and mapImg then
-                    for _, plr in ipairs(Players:GetPlayers()) do
-                        if plr ~= LocalPlayer and not (esp_map_markers[plr.Name] and esp_map_markers[plr.Name].m) then
-                            esp_map_markers[plr.Name] = {p=plr, m=mk(plr,false)}
-                        end
-                    end
-                    for _, d in pairs(esp_map_markers) do
-                        local w = get_wpos(d.p)
-                        if w and d.m then d.m.Position = world_to_map(mapImg, w); d.m.Visible = true
-                        elseif d.m then d.m.Visible = false end
-                    end
-                    -- Quest pins (9)
-                    if cheat._quest_map_pins then
-                        pcall(function()
-                            local qm = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("Quest")
-                            -- best-effort: mark models named Objective/Quest in workspace
-                        end)
-                    end
-                end
-                task.wait(0.1)
-            end
-        end)
-        Library:Notification("ESP Map ON", 2)
+
+        Library:Notification("ESP Map ON — use floating MAP button or game map icon", 3)
     end})
+
     MD:Toggle({ Name="Quest Pins on Map", Flag="quest_map_pins", Callback=function(v) cheat._quest_map_pins = v end })
 
     -- Door helpers
@@ -13827,7 +13800,7 @@ do
         return false
     end
     IT:Toggle({ Name="Item ESP", Flag="item_esp_on", Callback=function(v) cheat._item_esp=v
-        if not v then for _,d in pairs(item_draws) do pcall(function() d.name:Remove(); d.dist:Remove(); if d.ui_name then d.ui_name:Destroy() end; if d.ui_dist then d.ui_dist:Destroy() end end) end; table.clear(item_draws) end
+        if not v then for _,d in pairs(item_draws) do pcall(function() d.name:Remove(); d.dist:Remove() end) end; table.clear(item_draws) end
     end })
     IT:Slider({ Name="Item ESP Distance", Flag="item_esp_dist", Min=20, Max=500, Default=200, Suffix="m", Callback=function(v) cheat._item_esp_dist=v end })
     IT:Toggle({ Name="Loot Filter (Rare+)", Flag="loot_rare_only", Callback=function(v) cheat._loot_rare_only=v end })
@@ -13884,28 +13857,12 @@ do
             if on and sp.Z > 0 then
                 d.name.Text = n
                 d.name.Position = Vector2.new(sp.X, sp.Y)
-                d.name.Visible = false
+                d.name.Visible = true
                 d.dist.Text = string.format("%.0fm", meters)
                 d.dist.Position = Vector2.new(sp.X, sp.Y + 14)
-                d.dist.Visible = false
-                if d.ui_name then
-                    d.ui_name.Text = n
-                    d.ui_name.TextSize = 13
-                    d.ui_name.Position = UDim2.fromOffset(sp.X, sp.Y)
-                    d.ui_name.TextColor3 = Color3.fromRGB(255,230,120)
-                    pcall(function() if Library and Library.Font then d.ui_name.FontFace = Library.Font end end)
-                    d.ui_name.Visible = true
-                end
-                if d.ui_dist then
-                    d.ui_dist.Text = string.format("%.0fm", meters)
-                    d.ui_dist.TextSize = 12
-                    d.ui_dist.Position = UDim2.fromOffset(sp.X, sp.Y + 14)
-                    d.ui_dist.TextColor3 = Color3.fromRGB(200,200,200)
-                    pcall(function() if Library and Library.Font then d.ui_dist.FontFace = Library.Font end end)
-                    d.ui_dist.Visible = true
-                end
+                d.dist.Visible = true
             else
-                d.name.Visible = false; d.dist.Visible = false; if d.ui_name then d.ui_name.Visible=false end; if d.ui_dist then d.ui_dist.Visible=false end
+                d.name.Visible = false; d.dist.Visible = false
             end
         end
         -- limit scan cost: only descendants of loot-like folders first
