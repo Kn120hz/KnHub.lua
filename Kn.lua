@@ -8748,22 +8748,17 @@ do
                     local hum = target_char and target_char:FindFirstChild("Humanoid")
                     if target_name ~= "Unknown" and hum and Camera then
                         local now = os.clock()
-                        -- Anti-flood: 1 pending max every 0.55s; clear pellet spam
-                        if now - (cheat._hl_global_cd or 0) >= 0.55 then
-                            cheat._hl_global_cd = now
-                            if cheat.hitlogs and cheat.hitlogs.pending then
-                                table.clear(cheat.hitlogs.pending)
-                            end
+                        -- Exactly 1 log per shot window: ignore spam while locked
+                        if now >= (cheat._hl_lock_until or 0) then
                             local dist = math.floor((target_part.Position - Camera.CFrame.p).Magnitude / 2.8)
-                            table.insert(cheat.hitlogs.pending, {
-                                key = target_name .. "|" .. tostring(target_part.Name),
+                            cheat.hitlogs.pending = {{
                                 name = target_name,
                                 part = target_part.Name,
                                 dist = dist,
                                 tick = now,
                                 hum = hum,
                                 start_hp = target_char:GetAttribute("Health") or hum.Health
-                            })
+                            }}
                         end
                     end
                 end
@@ -8885,9 +8880,11 @@ do
                         -- Do not redirect short/interactive raycasts. Interaction rays
                         -- (objects, prompts, NPCs, etc.) keep their original target.
                         local original_direction = args[2]
+                        -- Interaction rays are short; combat rays are long.
+                        -- Threshold 150 avoids stealing ProximityPrompt / "relar" rays.
                         local is_combat_ray = typeof(original_direction) == "Vector3"
-                            and original_direction.Magnitude >= 100
-                        if is_combat_ray then
+                            and original_direction.Magnitude >= 150
+                        if is_combat_ray and silent_aim.enabled then
                             if silent_aim.corner_shoot and silent_aim.manipulated_origin then origin=silent_aim.manipulated_origin; args[1]=origin end
                             local direction=hitpart.Position-origin; args[2]=direction
                             return { Instance=hitpart, Position=hitpart.Position, Normal=direction.Unit*-1, Material=hitpart.Material, Distance=direction.Magnitude }
@@ -12789,17 +12786,8 @@ cheat.utility.new_renderstepped((function()
         end
 
         if is_resolved then
-            local str = string.format("%s hit %s on %dm", pending.name, pending.part, pending.dist)
-            local dup = false
-            if cheat.hitlogs.active[1] and cheat.hitlogs.active[1].str == str
-                and (current_time - (cheat.hitlogs.active[1].spawn_tick or 0)) < 0.7 then
-                dup = true
-            end
-            if (current_time - (cheat._hl_last_show or 0)) < 0.45 then
-                dup = true
-            end
-            if not dup then
-                cheat._hl_last_show = current_time
+            if current_time >= (cheat._hl_lock_until or 0) then
+                local str = string.format("%s hit %s on %dm", pending.name, pending.part, pending.dist)
                 local log_color = is_valid and cheat.hitlogs_valid_color or cheat.hitlogs_invalid_color
                 local bg = cheat.utility.new_drawing("Square", {
                     Size = _Vector2new(0, 0), Position = _Vector2new(-300, cheat.hitlogs_y),
@@ -12820,7 +12808,7 @@ cheat.utility.new_renderstepped((function()
                     drawing = text, bg = bg, line = line, str = str, spawn_tick = current_time,
                     target_y = cheat.hitlogs_y, current_x = -300
                 })
-                while #cheat.hitlogs.active > 6 do
+                while #cheat.hitlogs.active > 5 do
                     local oldlog = table.remove(cheat.hitlogs.active)
                     if oldlog then
                         pcall(function() if oldlog.drawing then oldlog.drawing:Remove() end end)
@@ -12828,11 +12816,11 @@ cheat.utility.new_renderstepped((function()
                         pcall(function() if oldlog.line then oldlog.line:Remove() end end)
                     end
                 end
+                -- 1 second lock = only ONE log per shot burst
+                cheat._hl_lock_until = current_time + 1.0
             end
-            table.remove(cheat.hitlogs.pending, i)
-            if #cheat.hitlogs.pending > 0 then
-                table.clear(cheat.hitlogs.pending)
-            end
+            cheat.hitlogs.pending = {}
+            break
         end
     end
 
@@ -13458,6 +13446,16 @@ do
                 local _, root = get_map_frame()
                 if root then root.Visible = false end
                 if cheat._map_float_btn then cheat._map_float_btn.Visible = false end
+                -- Release Modal so interactables work after disabling Unlock Map
+                local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                if pg then
+                    for _, g in ipairs(pg:GetChildren()) do
+                        if g:IsA("ScreenGui") then
+                            local mb = g:FindFirstChild("ModalButton")
+                            if mb then mb.Modal = false end
+                        end
+                    end
+                end
             end)
             return
         end
@@ -13495,9 +13493,7 @@ do
                 mapFrame.Size = UDim2.fromScale(1, 1)
                 mapFrame.Position = UDim2.new(0.5, 0, 0.49, 0)
                 if root then root.Visible = true end
-                if mainGui and mainGui:FindFirstChild("ModalButton") then
-                    mainGui.ModalButton.Modal = true
-                end
+                set_map_modal(true)
             end)
             pcall(function()
                 local r = root or mapFrame
@@ -13532,12 +13528,32 @@ do
             return true
         end
 
+        local function set_map_modal(on)
+            pcall(function()
+                local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                local mainGui = pg and (pg:FindFirstChild("MainGui") or pg:FindFirstChild("Main"))
+                if not mainGui then
+                    for _, g in ipairs(pg and pg:GetChildren() or {}) do
+                        if g:IsA("ScreenGui") and g:FindFirstChild("ModalButton") then
+                            mainGui = g
+                            break
+                        end
+                    end
+                end
+                if mainGui and mainGui:FindFirstChild("ModalButton") then
+                    mainGui.ModalButton.Modal = on and true or false
+                end
+            end)
+        end
+
         local function close_map_ui()
             esp_map_active = false
             pcall(function()
                 local _, root = get_map_frame()
                 if root then root.Visible = false end
             end)
+            -- CRITICAL: release Modal so world interactions (relar, prompts) work again
+            set_map_modal(false)
             if cheat._map_float_btn then cheat._map_float_btn.Text = "MAP" end
         end
 
@@ -13614,6 +13630,8 @@ do
                     if cheat._map_float_btn then cheat._map_float_btn.Text = "CLOSE" end
                 else
                     if cheat._map_float_btn then cheat._map_float_btn.Text = "MAP" end
+                    -- Always release Modal when map is closed so interactables work
+                    set_map_modal(false)
                 end
                 task.wait(0.3)
             end
