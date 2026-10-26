@@ -8211,6 +8211,35 @@ local function get_silent_fov_radius()
     return math.max(0, tonumber(silent_aim.fov_size) or 100)
 end
 
+-- Screen-space FOV check matching the drawn circle (center of Viewport, same radius).
+-- Slight inward margin so edge targets never look "outside" the ring.
+local function is_part_inside_silent_fov(part, fov_radius)
+    if not part or not part.Parent then return false end
+    local cam = workspace.CurrentCamera
+    if not cam then return false end
+    local radius = tonumber(fov_radius) or get_silent_fov_radius()
+    -- 1.5px margin keeps aim strictly inside the visible circle
+    radius = math.max(0, radius - 1.5)
+    local vp = cam.ViewportSize
+    local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
+    local screen, on_screen = cam:WorldToViewportPoint(part.Position)
+    if not on_screen or screen.Z <= 0 then return false end
+    local sp = Vector2.new(screen.X, screen.Y)
+    return (sp - center).Magnitude <= radius
+end
+
+-- Clear target if Use FOV is on and part left the circle (call before any redirect).
+local function silent_aim_target_valid()
+    local part = silent_aim.target_part
+    if not part or not part.Parent then return false end
+    if silent_aim.fov then
+        if not is_part_inside_silent_fov(part, get_silent_fov_radius()) then
+            return false
+        end
+    end
+    return true
+end
+
 local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, require_triggerable, allow_manip, manip_origin)
     local is_visible_fn = cheat.utility.is_visible
     aimpart   = aimpart or silent_aim.part or "Head"
@@ -8227,20 +8256,17 @@ local function get_closest_target(usefov, fov_size, aimpart, npc, target_heli, r
     local distance_origin = local_root and local_root.Position or Camera.CFrame.Position
     local best_world_distance = math.huge
     local best_screen_distance = math.huge
-    -- Silent Aim target selection is always bounded by the same FOV radius
-    -- used by the rendered circle. The FOV toggle controls visualization, not
-    -- the actual safety boundary of target selection.
-    local maximum_distance = fov_size
-    -- Silent Aim target point: fixed at the center of the screen.
-    -- Touch/mouse movement no longer changes the target point.
+    -- When Use FOV is ON, selection is strictly limited to the drawn circle.
+    -- When Use FOV is OFF, no screen-space FOV limit (circle is hidden).
+    local maximum_distance = usefov and math.max(0, (tonumber(fov_size) or get_silent_fov_radius()) - 1.5) or math.huge
     local viewport = Camera.ViewportSize
     local mousepos = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
 
-    -- Use exactly the same center/radius math as the rendered FOV circle.
     local function is_inside_fov(screen_position, on_screen)
+        if not usefov then return on_screen and screen_position.Z > 0 end
         if not on_screen or screen_position.Z <= 0 then return false end
         local screen_pos = Vector2.new(screen_position.X, screen_position.Y)
-        return (screen_pos - mousepos).Magnitude <= fov_size
+        return (screen_pos - mousepos).Magnitude <= maximum_distance
     end
 
     local function is_triggerable(parent, part)
@@ -8595,7 +8621,10 @@ do
                                 spawn_bullet_tracer(tracer_origin, tracer_target)
                             end
                             if silent_aim.instant then return old(self, unpack(args,1,argCount)) end
-                            if not silent_aim.target_part then return old(self, unpack(args,1,argCount)) end
+                            -- Hard FOV gate: never redirect AimPart if target is outside the drawn circle
+                            if not silent_aim.target_part or not silent_aim_target_valid() then
+                                return old(self, unpack(args,1,argCount))
+                            end
                             local real_aimpart = args[aimpart_index]
                             local old_cf = real_aimpart.CFrame
                             local fire_origin = real_aimpart.Position
@@ -8851,14 +8880,14 @@ do
             elseif cheat.freecam_enabled then
                 local char=LocalPlayer.Character; if char and char:FindFirstChild("Head") then real_orig=char.Head.Position; origin_spoofed=true end
             end
-            if origin_spoofed and silent_aim.enabled and silent_aim.target_part then
+            if origin_spoofed and silent_aim.enabled and silent_aim.target_part and silent_aim_target_valid() then
                 local _aim_part = silent_aim.target_part
                 args[1] = (_aim_part.Position - real_orig).Unit
             elseif origin_spoofed and cheat.freecam_enabled then
                 local hit_pos = Mouse.Hit.Position
                 args[1] = (hit_pos - real_orig).Unit
             end
-            if silent_aim.enabled and silent_aim.instant and silent_aim.target_part then
+            if silent_aim.enabled and silent_aim.instant and silent_aim.target_part and silent_aim_target_valid() then
                 local dist=(silent_aim.target_part.Position-real_orig).Magnitude
                 args[3]=tick()-(dist/1000)
             end
@@ -8870,7 +8899,7 @@ do
                 if cheat.freecam_enabled then
                     local char=LocalPlayer.Character; if char and char:FindFirstChild("Head") then origin=char.Head.Position; args[1]=origin end
                 end
-                if silent_aim.enabled and silent_aim.target_part then
+                if silent_aim.enabled and silent_aim.target_part and silent_aim_target_valid() then
                     local hitpart = silent_aim.target_part
                     if hitpart and hitpart.Parent then
                         -- Do not redirect short/interactive raycasts. Interaction rays
@@ -9584,7 +9613,7 @@ do
     AimL:Toggle({ Name="Target Line",          Flag="sa_target_line",     Default=false, Callback=function(v) silent_aim.target_line=v end })
     AimL:Toggle({ Name="Visible Targets Only",  Flag="sa_visible_only",     Default=true, Callback=function(v) silent_aim.visible_only=v end })
     AimL:Toggle({ Name="FOV Outline Glow",     Flag="sa_fov_outline",     Callback=function(v) silent_aim.fov_outline=v end })
-    AimL:Slider({ Name="FOV Size",             Flag="sa_fov_size",        Min=10,Max=1000,Increment=1, Callback=function(v) silent_aim.fov_size=v end })
+    AimL:Slider({ Name="FOV Size", Flag="sa_fov_size", Min=10, Max=1000, Increment=1, Default=100, Callback=function(v) silent_aim.fov_size=v end })
     AimL:Slider({ Name="FOV Glow Intensity",   Flag="sa_fov_glow",        Min=1,Max=100,Increment=1, Callback=function(v) silent_aim.fov_glow_intensity=v/10 end })
 
     -- Player whitelist. Kaene_zy is always present as a locked/native entry.
@@ -10063,7 +10092,7 @@ do
 
                 -- If Use FOV is active, the line is allowed only for a target
                 -- inside that exact same FOV circle.
-                local inside_fov = (not silent_aim.fov) or magnitude <= get_silent_fov_radius()
+                local inside_fov = (not silent_aim.fov) or magnitude <= math.max(0, get_silent_fov_radius() - 1.5)
                 if inside_fov then
                     if magnitude > 0.001 then
                         -- Start exactly at the center. Since the target is now
@@ -12897,15 +12926,12 @@ cheat.utility.new_heartbeat((function(delta)
 
     -- Final consistency guard: every Silent Aim target must remain inside the
     -- exact same center/radius used by the FOV drawing.
-    if silent_aim.target_part then
-        local vp = Camera.ViewportSize
-        local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-        local screen, onScreen = Camera:WorldToViewportPoint(silent_aim.target_part.Position)
-        local screenPos = Vector2.new(screen.X, screen.Y)
-        local same_fov = onScreen and screen.Z > 0 and (screenPos - center).Magnitude <= get_silent_fov_radius()
-        if not same_fov then
+    -- Re-validate against the drawn FOV every frame (target can leave the circle between shots).
+    if silent_aim.target_part and silent_aim.fov then
+        if not is_part_inside_silent_fov(silent_aim.target_part, get_silent_fov_radius()) then
             silent_aim.target_part = nil
             silent_aim.is_npc = false
+            silent_aim.isvisible = false
         end
     end
 
