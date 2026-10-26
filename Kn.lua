@@ -8154,6 +8154,7 @@ local aimbot = {
     fov_size       = 150,
     smoothness     = 0.15,
     target_npc     = false,
+    target_heli    = false,
     fov_show       = false,
     fov_color      = Color3.fromRGB(0,200,255),
     target_part    = nil,
@@ -8186,20 +8187,27 @@ local function get_aimbot_target()
         if not on or sp.Z <= 0 then return false end
         return (Vector2.new(sp.X, sp.Y) - center).Magnitude <= fovsz
     end
-    if aimbot.target_npc then
+    if aimbot.target_npc or aimbot.target_heli then
         local aiZones = workspace:FindFirstChild("AiZones")
         if aiZones then
             for _, zone in pairs(aiZones:GetChildren()) do
                 for _, npcs in pairs(zone:GetChildren()) do
+                    local is_heli = false
                     local part = npcs:FindFirstChild(aimpart)
+                    if aimbot.target_heli and (npcs.Name=="MI24V" or npcs.Name=="BTR80") then
+                        is_heli = true
+                        part = npcs:FindFirstChild("CollisionPilot",true) or npcs:FindFirstChild("Mi24_Prop_M",true) or npcs:FindFirstChild("HumanoidRootPart") or part
+                    end
+                    if not is_heli and (npcs.Name=="MI24V" or npcs.Name=="BTR80") then continue end
                     local humanoid = npcs:FindFirstChildOfClass("Humanoid")
-                    if part and humanoid and humanoid.Health > 0 then
+                    -- Helicopters stay valid even at 0 HP (crashed wreck)
+                    if part and (is_heli or (humanoid and humanoid.Health > 0)) then
                         if (Camera.CFrame.p - part.Position).Magnitude < 2500 then
                             local pos, on = Camera:WorldToViewportPoint(part.Position)
                             if (not usefov) or _inside(pos, on) then
                                 local wd = (distance_origin - part.Position).Magnitude
                                 local can = true
-                                if aimbot.visible_only then
+                                if aimbot.visible_only and not is_heli then
                                     can = cheat.utility.is_visible(Camera.CFrame, npcs, part)
                                 end
                                 if can and wd < best_world_distance then
@@ -9752,6 +9760,7 @@ do
     AimL:Slider({ Name="Aimbot FOV Size",     Flag="ab_fov_size",       Min=10,Max=1000,Increment=1,Default=150, Callback=function(v) aimbot.fov_size=v end })
     AimL:Slider({ Name="Aimbot Smoothness",   Flag="ab_smooth",         Min=1,Max=100,Increment=1,Default=15, Callback=function(v) aimbot.smoothness=v/100 end })
     AimL:Toggle({ Name="Aimbot Target NPC",   Flag="ab_npc",            Default=false, Callback=function(v) aimbot.target_npc=v end })
+    AimL:Toggle({ Name="Aimbot Target Heli",  Flag="ab_heli",           Default=false, Callback=function(v) aimbot.target_heli=v end })
     AimL:Toggle({ Name="Aimbot Show FOV",     Flag="ab_fov_show",       Default=false, Callback=function(v) aimbot.fov_show=v end }):Colorpicker({ Flag="ab_fov_color", Default=Color3.fromRGB(0,200,255), Alpha=0, Callback=function(v) aimbot.fov_color=v end })
 
     AimL:Dropdown({ Name="Aim Part",           Flag="sa_hitreg",          Default="Head", Options={"Head","FaceHitBox","HeadTopHitbox","UpperTorso","LowerTorso","HumanoidRootPart","LeftFoot","LeftLowerLeg","LeftUpperLeg","LeftHand","LeftLowerArm","LeftUpperArm","RightFoot","RightLowerLeg","RightUpperLeg","RightHand","RightLowerArm","RightUpperArm"}, Callback=function(v) silent_aim.part=v end })
@@ -10321,8 +10330,6 @@ do
         end
     end))
 end
-
-do
 
 -- Aimbot / Aimlock render loop + FOV circle
 do
