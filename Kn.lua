@@ -8140,6 +8140,102 @@ local function predict_drop(Origin, Destination, ProjectileSpeed, ProjectileDrop
     return DropTime
 end
 
+-- Forward declaration so the aimbot target scanner can use it.
+local silent_aim_is_whitelisted
+
+-- Aimbot / Aimlock: real camera rotation toward the target.
+-- Fully independent of Silent Aim; shares only target-selection helpers.
+local aimbot = {
+    enabled        = false,
+    key_held       = false,
+    part           = "Head",
+    visible_only   = true,
+    fov            = true,
+    fov_size       = 150,
+    smoothness     = 0.15,
+    target_npc     = false,
+    fov_show       = false,
+    fov_color      = Color3.fromRGB(0,200,255),
+    target_part    = nil,
+}
+
+local function get_aimbot_fov_radius()
+    return math.max(0, tonumber(aimbot.fov_size) or 150)
+end
+
+local function get_aimbot_target()
+    if not aimbot.enabled then return nil end
+    if aimbot.key_held ~= true then
+        -- If no keybind is set (Unknown), treat as always-active lock.
+        local kb = Library.Flags.ab_key
+        if kb and tostring(kb) ~= "Unknown" and tostring(kb) ~= "Enum.KeyCode.Unknown" then
+            if not aimbot.key_held then return nil end
+        end
+    end
+    local usefov = aimbot.fov
+    local fovsz  = get_aimbot_fov_radius()
+    local ermm_part, isnpc = nil, false
+    local local_char = LocalPlayer.Character
+    local local_root = local_char and local_char:FindFirstChild("HumanoidRootPart")
+    local distance_origin = local_root and local_root.Position or Camera.CFrame.Position
+    local best_world_distance = math.huge
+    local viewport = Camera.ViewportSize
+    local center = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+    local aimpart = aimbot.part
+    local function _inside(sp, on)
+        if not on or sp.Z <= 0 then return false end
+        return (Vector2.new(sp.X, sp.Y) - center).Magnitude <= fovsz
+    end
+    if aimbot.target_npc then
+        local aiZones = workspace:FindFirstChild("AiZones")
+        if aiZones then
+            for _, zone in pairs(aiZones:GetChildren()) do
+                for _, npcs in pairs(zone:GetChildren()) do
+                    local part = npcs:FindFirstChild(aimpart)
+                    local humanoid = npcs:FindFirstChildOfClass("Humanoid")
+                    if part and humanoid and humanoid.Health > 0 then
+                        if (Camera.CFrame.p - part.Position).Magnitude < 2500 then
+                            local pos, on = Camera:WorldToViewportPoint(part.Position)
+                            if (not usefov) or _inside(pos, on) then
+                                local wd = (distance_origin - part.Position).Magnitude
+                                local can = true
+                                if aimbot.visible_only then
+                                    can = cheat.utility.is_visible(Camera.CFrame, npcs, part)
+                                end
+                                if can and wd < best_world_distance then
+                                    best_world_distance = wd; ermm_part = part; isnpc = true
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for _, plr in Players:GetPlayers() do
+        local character = plr.Character
+        if plr ~= LocalPlayer and character and not silent_aim_is_whitelisted(plr) then
+            local part = character:FindFirstChild(aimpart)
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local root = character:FindFirstChild("HumanoidRootPart") or part
+            if part and humanoid and humanoid.Health > 0 and root then
+                local pos, on = Camera:WorldToViewportPoint(part.Position)
+                if (not usefov) or _inside(pos, on) then
+                    local wd = (distance_origin - root.Position).Magnitude
+                    local can = true
+                    if aimbot.visible_only then
+                        can = cheat.utility.is_visible(Camera.CFrame, character, part)
+                    end
+                    if can and wd < best_world_distance then
+                        best_world_distance = wd; ermm_part = part; isnpc = false
+                    end
+                end
+            end
+        end
+    end
+    return ermm_part
+end
+
 local silent_aim = {
     enabled          = false,
     triggerbot       = false,
@@ -8175,7 +8271,7 @@ local silent_aim = {
     tracer_thickness = 0.5,
     tracer_lifetime  = 1,
     -- Native whitelist: this player is ALWAYS ignored and cannot be removed.
-    native_whitelist = { ["Kaene_zy"] = true },
+    native_whitelist = { ["Knzx_l"] = true },
     whitelist_mode   = false,
     whitelist        = {},
     tipanel_x        = 20,
@@ -8186,6 +8282,7 @@ local silent_aim = {
     target_info_locked = false,
     visible_only     = true,
     triggerbot_manipulation = false,
+    ignore_friends   = false,
 }
 
 -- reusable raycast params/filter for is_triggerable — avoids a RaycastParams +
@@ -8194,17 +8291,52 @@ local _gct_trig_rp = RaycastParams.new()
 _gct_trig_rp.FilterType = Enum.RaycastFilterType.Exclude
 local _gct_trig_filter = {nil, nil, nil}
 
-local function silent_aim_is_whitelisted(plr)
+silent_aim_is_whitelisted = function(plr)
     if not plr then return false end
-    -- Kaene_zy is a native, non-configurable whitelist entry.
+    -- Knzx_l is a native, non-configurable whitelist entry.
     if silent_aim.native_whitelist[plr.Name] then
         return true
     end
     if silent_aim.whitelist_mode and silent_aim.whitelist[plr.Name] then
         return true
     end
+    -- Ignore Friends: never target players on the local player's friend list.
+    -- Uses a cache (refreshed in background) because IsFriendsWith yields.
+    if silent_aim.ignore_friends then
+        if _friend_cache and _friend_cache[plr.UserId] == true then
+            return true
+        end
+    end
     return false
 end
+
+-- Friend cache: refreshed periodically in a background thread so the
+-- target-selection loop never calls a yielding IsFriendsWith per frame.
+local _friend_cache = {}
+local _friend_cache_refresh = 0
+task.spawn(function()
+    while true do
+        task.wait(15)
+        if not silent_aim.ignore_friends then
+            _friend_cache = {}
+            _friend_cache_refresh = 0
+            continue
+        end
+        local new_cache = {}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local ok, is_friend = pcall(function()
+                    return LocalPlayer:IsFriendsWith(plr.UserId)
+                end)
+                if ok and is_friend then
+                    new_cache[plr.UserId] = true
+                end
+            end
+            task.wait(0.1)
+        end
+        _friend_cache = new_cache
+    end
+end)
 
 -- Single source of truth for the rendered/selection FOV radius.
 local function get_silent_fov_radius()
@@ -8595,6 +8727,16 @@ do
                                 spawn_bullet_tracer(tracer_origin, tracer_target)
                             end
                             if silent_aim.instant then return old(self, unpack(args,1,argCount)) end
+                            -- Final FOV gate: never redirect a shot toward a
+                            -- target that has moved outside the rendered FOV circle.
+                            if silent_aim.fov and silent_aim.target_part then
+                                local _vp2 = Camera.ViewportSize
+                                local _ctr2 = Vector2.new(_vp2.X * 0.5, _vp2.Y * 0.5)
+                                local _scr2, _on2 = Camera:WorldToViewportPoint(silent_aim.target_part.Position)
+                                if not (_on2 and _scr2.Z > 0 and (Vector2.new(_scr2.X, _scr2.Y) - _ctr2).Magnitude <= get_silent_fov_radius()) then
+                                    return old(self, unpack(args,1,argCount))
+                                end
+                            end
                             if not silent_aim.target_part then return old(self, unpack(args,1,argCount)) end
                             local real_aimpart = args[aimpart_index]
                             local old_cf = real_aimpart.CFrame
@@ -8690,7 +8832,7 @@ do
             if handle then return handle end
             local dummy=Instance.new("Part"); dummy.Name="Handle"; dummy.Transparency=1; return dummy
         end
-        if (k=="CFrame" or k=="Position") and cheat.real_CFrame and not cheat.is_dead_or_respawning and not cheat.is_flying_or_tp() then
+        if (k=="CFrame" or k=="Position") and (aa_enabled or fake_lag_enabled or silent_aim.corner_shoot) and cheat.real_CFrame and not cheat.is_dead_or_respawning and not cheat.is_flying_or_tp() then
             local char = LocalPlayer.Character
             if char and typeof(self)=="Instance" and self==char:FindFirstChild("HumanoidRootPart") then
                 if k=="CFrame"   then return cheat.real_CFrame end
@@ -8741,29 +8883,36 @@ do
                 end
             end
             if success and rname=="ProjectileInflict" then
-                if cheat.hitlogs_enabled and args[1] and typeof(args[1])=="Instance" then
-                    local target_part = args[1]
-                    local target_char = target_part.Parent
-                    local target_name = target_char and target_char.Name or "Unknown"
-                    local hum = target_char and target_char:FindFirstChild("Humanoid")
-                    if target_name ~= "Unknown" and hum and Camera then
-                        local now = os.clock()
-                        -- Exactly 1 log per shot window: ignore spam while locked
-                        if now >= (cheat._hl_lock_until or 0) then
-                            local dist = math.floor((target_part.Position - Camera.CFrame.p).Magnitude / 2.8)
-                            cheat.hitlogs.pending = {{
-                                name = target_name,
-                                part = target_part.Name,
-                                dist = dist,
-                                tick = now,
-                                hum = hum,
-                                start_hp = target_char:GetAttribute("Health") or hum.Health
-                            }}
+                pcall(function()
+                    if cheat.hitlogs_enabled and args[1] and typeof(args[1])=="Instance" then
+                        local target_part = args[1]
+                        local target_char = target_part.Parent
+                        local target_name = target_char and target_char.Name or "Unknown"
+                        local hum = target_char and target_char:FindFirstChild("Humanoid")
+                        if target_name ~= "Unknown" and hum and Camera then
+                            local now = os.clock()
+                            -- Exactly 1 log per shot window: ignore spam while locked
+                            if now >= (cheat._hl_lock_until or 0) then
+                                local dist = math.floor((target_part.Position - Camera.CFrame.p).Magnitude / 2.8)
+                                -- Append (do not replace) so concurrent damage-numbers
+                                -- entries and multiple hits in one window survive.
+                                table.insert(cheat.hitlogs.pending, {
+                                    name = target_name,
+                                    part = target_part.Name,
+                                    dist = dist,
+                                    tick = now,
+                                    hum = hum,
+                                    start_hp = target_char:GetAttribute("Health") or hum.Health
+                                })
+                                -- Immediate on-screen notification for the hit.
+                                pcall(function()
+                                    Library:Notification(string.format("Hit %s [%s] %dm", target_name, target_part.Name, dist), 1.5, Color3.fromRGB(80,220,120))
+                                end)
+                            end
                         end
                     end
-                end
+                end)
             end
-        end
         if self==game_TweenService and method=="Create" and args[1]==Camera and rawget(args[3],"FieldOfView") and (globals.fov_enabled or globals.zoom_enabled) then
             args[3]={}; setnamecallmethod(methodstr); return __namecall(self, unpack(args,1,argCount))
         end
@@ -8907,8 +9056,27 @@ do
         cheat.is_dead_or_respawning = true
     end
     LocalPlayer.CharacterAdded:Connect(function()
-        cheat.is_dead_or_respawning=true
-        task.delay(0.5, function() cheat.is_dead_or_respawning=false end)
+        cheat.is_dead_or_respawning = true
+        -- Clear stale desync state so the __index hook never feeds a
+        -- pre-death CFrame back to the new character.
+        cheat.real_CFrame = nil
+        fake_lag_CFrame = nil
+        silent_aim.target_part = nil
+        silent_aim.manipulated_origin = nil
+        -- Release any stuck Modal button so HUD clicks work after respawn.
+        pcall(function()
+            local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+            if pg then
+                for _, g in ipairs(pg:GetChildren()) do
+                    if g:IsA("ScreenGui") then
+                        local mb = g:FindFirstChild("ModalButton")
+                        if mb then mb.Modal = false end
+                    end
+                end
+            end
+            UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        end)
+        task.delay(1.2, function() cheat.is_dead_or_respawning = false end)
     end)
 
     task.wait()
@@ -9576,6 +9744,16 @@ do
     local AimR = AimbotCat:Section({ Name = "Options",    Side = 2 })
 
     AimL:Toggle({ Name="Silent Aim",           Flag="sa_enabled",        Callback=function(v) silent_aim.enabled=v end })
+    -- Aimbot / Aimlock: separate from Silent Aim, placed directly below it.
+    AimL:Toggle({ Name="Aimbot (Aimlock)",   Flag="ab_enabled",        Default=false, Callback=function(v) aimbot.enabled=v end }):Keybind({ Flag="ab_key", Mode="Hold", Default=Enum.KeyCode.Unknown, Callback=function(v) aimbot.key_held=v end })
+    AimL:Dropdown({ Name="Aimbot Part",       Flag="ab_part",           Default="Head", Options={"Head","FaceHitBox","HeadTopHitbox","UpperTorso","LowerTorso","HumanoidRootPart"}, Callback=function(v) aimbot.part=v end })
+    AimL:Toggle({ Name="Aimbot Visible Only", Flag="ab_visible_only",   Default=true, Callback=function(v) aimbot.visible_only=v end })
+    AimL:Toggle({ Name="Aimbot Use FOV",      Flag="ab_fov",            Default=true, Callback=function(v) aimbot.fov=v end })
+    AimL:Slider({ Name="Aimbot FOV Size",     Flag="ab_fov_size",       Min=10,Max=1000,Increment=1,Default=150, Callback=function(v) aimbot.fov_size=v end })
+    AimL:Slider({ Name="Aimbot Smoothness",   Flag="ab_smooth",         Min=1,Max=100,Increment=1,Default=15, Callback=function(v) aimbot.smoothness=v/100 end })
+    AimL:Toggle({ Name="Aimbot Target NPC",   Flag="ab_npc",            Default=false, Callback=function(v) aimbot.target_npc=v end })
+    AimL:Toggle({ Name="Aimbot Show FOV",     Flag="ab_fov_show",       Default=false, Callback=function(v) aimbot.fov_show=v end }):Colorpicker({ Flag="ab_fov_color", Default=Color3.fromRGB(0,200,255), Alpha=0, Callback=function(v) aimbot.fov_color=v end })
+
     AimL:Dropdown({ Name="Aim Part",           Flag="sa_hitreg",          Default="Head", Options={"Head","FaceHitBox","HeadTopHitbox","UpperTorso","LowerTorso","HumanoidRootPart","LeftFoot","LeftLowerLeg","LeftUpperLeg","LeftHand","LeftLowerArm","LeftUpperArm","RightFoot","RightLowerLeg","RightUpperLeg","RightHand","RightLowerArm","RightUpperArm"}, Callback=function(v) silent_aim.part=v end })
     AimL:Toggle({ Name="Randomize Hit Part",   Flag="sa_random_part",     Callback=function(v) silent_aim.random_part=v end })
     AimL:Toggle({ Name="Instant Hit",          Flag="sa_instant",         Callback=function(v) silent_aim.instant=v end })
@@ -9593,7 +9771,7 @@ do
     AimL:Slider({ Name="FOV Size",             Flag="sa_fov_size",        Min=10,Max=1000,Increment=1, Callback=function(v) silent_aim.fov_size=v end })
     AimL:Slider({ Name="FOV Glow Intensity",   Flag="sa_fov_glow",        Min=1,Max=100,Increment=1, Callback=function(v) silent_aim.fov_glow_intensity=v/10 end })
 
-    -- Player whitelist. Kaene_zy is always present as a locked/native entry.
+    -- Player whitelist. Knzx_l is always present as a locked/native entry.
     local sa_whitelist_dropdown
     do
         local initial_players = {}
@@ -9608,12 +9786,12 @@ do
             Options = initial_players,
             Multi = true,
             Default = {},
-            Locked = { ["Kaene_zy"] = true },
+            Locked = { ["Knzx_l"] = true },
             Callback = function(values)
                 silent_aim.whitelist = {}
                 if type(values) == "table" then
                     for _, name in ipairs(values) do
-                        if name ~= "Kaene_zy" then
+                        if name ~= "Knzx_l" then
                             silent_aim.whitelist[name] = true
                         end
                     end
@@ -9628,6 +9806,15 @@ do
         Default = false,
         Callback = function(v)
             silent_aim.whitelist_mode = v
+        end
+    })
+
+    AimL:Toggle({
+        Name = "Ignore Friends",
+        Flag = "sa_ignore_friends",
+        Default = false,
+        Callback = function(v)
+            silent_aim.ignore_friends = v
         end
     })
 
@@ -9647,13 +9834,13 @@ do
 
         local has_native = false
         for _, name in ipairs(names) do
-            if name == "Kaene_zy" then
+            if name == "Knzx_l" then
                 has_native = true
                 break
             end
         end
         if not has_native then
-            table.insert(names, "Kaene_zy")
+            table.insert(names, "Knzx_l")
             table.sort(names, function(a,b) return string.lower(a) < string.lower(b) end)
         end
 
@@ -9661,7 +9848,7 @@ do
 
         local restored = {}
         for _, name in ipairs(names) do
-            if name ~= "Kaene_zy" and selected[name] then
+            if name ~= "Knzx_l" and selected[name] then
                 table.insert(restored, name)
             end
         end
@@ -10133,6 +10320,56 @@ do
             CSText.Visible = false
         end
     end))
+end
+
+do
+
+-- Aimbot / Aimlock render loop + FOV circle
+do
+    local ab_fov_circle = cheat.utility.new_drawing("Circle", {Thickness=1, ZIndex=2, Visible=false, Filled=false})
+    local ab_fov_glow = {}
+    for i=1,8 do ab_fov_glow[i]=cheat.utility.new_drawing("Circle",{Thickness=1,ZIndex=1,Visible=false}) end
+    cheat.utility.new_renderstepped(function()
+        local viewport = Camera.ViewportSize
+        local pos = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
+        local active = aimbot.enabled and aimbot.fov_show
+        ab_fov_circle.Position = pos
+        ab_fov_circle.Radius = get_aimbot_fov_radius()
+        ab_fov_circle.Color = aimbot.fov_color
+        ab_fov_circle.Visible = active
+        for i=1,8 do
+            local gc = ab_fov_glow[i]
+            gc.Position = pos
+            gc.Radius = get_aimbot_fov_radius() + i * 1.5
+            gc.Color = aimbot.fov_color
+            gc.Transparency = 0.7 - i * 0.07
+            gc.Visible = active
+        end
+    end)
+    cheat.utility.new_renderstepped(function()
+        if not aimbot.enabled then aimbot.target_part = nil; return end
+        if cheat.is_dead_or_respawning or cheat.freecam_enabled then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return end
+        -- Keybind gate: if a real key is bound, require it held.
+        local kb = Library.Flags.ab_key
+        local key_ok = true
+        if kb and tostring(kb) ~= "Unknown" and tostring(kb) ~= "Enum.KeyCode.Unknown" then
+            key_ok = aimbot.key_held == true
+        end
+        if not key_ok then aimbot.target_part = nil; return end
+        local target = get_aimbot_target()
+        aimbot.target_part = target
+        if not target then return end
+        local target_pos = target.Position
+        local cam_pos = Camera.CFrame.Position
+        local desired_cf = CFrame.new(cam_pos, target_pos)
+        local smooth = math.clamp(aimbot.smoothness, 0.01, 1)
+        -- Use Lerp on CFrame for smooth aimlock rotation.
+        Camera.CFrame = Camera.CFrame:Lerp(desired_cf, smooth)
+    end)
 end
 
 do
@@ -12819,8 +13056,8 @@ cheat.utility.new_renderstepped((function()
                 -- 1 second lock = only ONE log per shot burst
                 cheat._hl_lock_until = current_time + 1.0
             end
-            cheat.hitlogs.pending = {}
-            break
+            table.remove(cheat.hitlogs.pending, i)
+            continue
         end
     end
 
@@ -13059,7 +13296,21 @@ cheat.utility.new_heartbeat((function(delta)
         if alt_part then
             silent_aim.target_part = alt_part
             silent_aim.is_npc = alt_npc
-            triggerable = true
+            -- Re-apply FOV consistency guard: triggerbot fallback must
+            -- never leave a target selected outside the rendered FOV circle.
+            if silent_aim.target_part then
+                local _vp = Camera.ViewportSize
+                local _ctr = Vector2.new(_vp.X * 0.5, _vp.Y * 0.5)
+                local _scr, _onScr = Camera:WorldToViewportPoint(silent_aim.target_part.Position)
+                local _spos = Vector2.new(_scr.X, _scr.Y)
+                if not (_onScr and _scr.Z > 0 and (_spos - _ctr).Magnitude <= get_silent_fov_radius()) then
+                    silent_aim.target_part = nil
+                    silent_aim.is_npc = false
+                    triggerable = false
+                else
+                    triggerable = true
+                end
+            end
         end
     end
 
