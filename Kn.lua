@@ -8175,7 +8175,7 @@ local silent_aim = {
     tracer_thickness = 0.5,
     tracer_lifetime  = 1,
     -- Native whitelist: this player is ALWAYS ignored and cannot be removed.
-    native_whitelist = { ["Knzx_l"] = true },
+    native_whitelist = { ["Kaene_zy"] = true },
     whitelist_mode   = false,
     whitelist        = {},
     tipanel_x        = 20,
@@ -8194,65 +8194,13 @@ local _gct_trig_rp = RaycastParams.new()
 _gct_trig_rp.FilterType = Enum.RaycastFilterType.Exclude
 local _gct_trig_filter = {nil, nil, nil}
 
--- ===== Ignore Friends (Silent Aim) =====
-local silent_aim_ignore_friends = false
-
-local friend_cache = {}
-local friend_cache_time = 0
-local function is_friend_cached(plr)
-    if not plr or plr == LocalPlayer then return false end
-    local now = tick()
-    if now - friend_cache_time > 30 then
-        friend_cache = {}
-        friend_cache_time = now
-    end
-    if friend_cache[plr] == nil then
-        local ok, result = pcall(function() return plr:IsFriendsWith(LocalPlayer.UserId) end)
-        friend_cache[plr] = ok and result or false
-    end
-    return friend_cache[plr]
-end
-
--- ============================================================
--- AIMBOT (AIMLOCK) — move a câmera, diferente do Silent Aim
--- ============================================================
-local aimbot_enabled         = false
-local aimbot_part            = "Head"
-local aimbot_fov_size        = 150
-local aimbot_smoothness      = 0.25
-local aimbot_visible_only    = true
-local aimbot_ignore_friends  = true
-local aimbot_max_dist        = 500
-local aimbot_show_fov        = false
-local aimbot_fov_color       = Color3.fromRGB(255, 90, 90)
-local aimbot_target          = nil
-local aimbot_friend_cache    = {}
-local aimbot_friend_cache_time = 0
-
-local function aimbot_is_friend(plr)
-    if not plr or plr == LocalPlayer then return false end
-    local now = tick()
-    if now - aimbot_friend_cache_time > 30 then
-        aimbot_friend_cache = {}
-        aimbot_friend_cache_time = now
-    end
-    if aimbot_friend_cache[plr] == nil then
-        local ok, r = pcall(function() return plr:IsFriendsWith(LocalPlayer.UserId) end)
-        aimbot_friend_cache[plr] = ok and r or false
-    end
-    return aimbot_friend_cache[plr]
-end
-
 local function silent_aim_is_whitelisted(plr)
     if not plr then return false end
-    -- Knzx_l é whitelist nativa, não configurável.
+    -- Kaene_zy is a native, non-configurable whitelist entry.
     if silent_aim.native_whitelist[plr.Name] then
         return true
     end
     if silent_aim.whitelist_mode and silent_aim.whitelist[plr.Name] then
-        return true
-    end
-    if silent_aim_ignore_friends and is_friend_cached(plr) then
         return true
     end
     return false
@@ -8769,36 +8717,9 @@ do
     end)))
 
     local __namecall; __namecall = hookmetamethod(game, "__namecall", newcclosure((function(self,...)
+        if checkcaller() then return __namecall(self,...) end
         local method   = getnamecallmethod()
         local methodstr= tostring(method)
-
-        -- === HIT LOG: processa ANTES do checkcaller (captura tiros do Silent Aim) ===
-        if cheat.hitlogs_enabled and (methodstr == "FireServer" or methodstr == "fireServer") then
-            local ok_name, rname = pcall(function() return self.Name end)
-            if ok_name and rname == "ProjectileInflict" then
-                local args_log = {...}
-                local hit_part = args_log[1]
-                if hit_part and typeof(hit_part) == "Instance" and hit_part:IsA("BasePart") then
-                    local target_char = hit_part:FindFirstAncestorOfClass("Model") or hit_part.Parent
-                    local hum = target_char and target_char:FindFirstChildOfClass("Humanoid")
-                    if target_char and hum then
-                        local now_log = os.clock()
-                        if now_log >= (cheat._hl_lock_until or 0) then
-                            cheat.hitlogs.pending = {{
-                                name = target_char.Name,
-                                part = hit_part.Name,
-                                dist = math.floor((hit_part.Position - Camera.CFrame.p).Magnitude / 2.8),
-                                tick = now_log,
-                                hum = hum,
-                                start_hp = target_char:GetAttribute("Health") or hum.Health
-                            }}
-                        end
-                    end
-                end
-            end
-        end
-
-        if checkcaller() then return __namecall(self,...) end
         -- fast path: avoid {…} table alloc for the vast majority of calls we never touch
         if methodstr~="InvokeServer" and methodstr~="invokeServer"
            and methodstr~="FireServer" and methodstr~="fireServer"
@@ -8985,57 +8906,9 @@ do
         and LocalPlayer.Character.Humanoid.Health<=0 then
         cheat.is_dead_or_respawning = true
     end
-    LocalPlayer.CharacterAdded:Connect(function(char)
-        cheat.is_dead_or_respawning = true
-        cheat.real_CFrame = nil
-        cheat.last_fly_or_tp_time = 0
-        friend_cache = {}
-        friend_cache_time = 0
-
-        pcall(function()
-            if not cheat.freecam_enabled then
-                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-            end
-        end)
-
-        pcall(function()
-            local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-            for _, g in ipairs(pg and pg:GetChildren() or {}) do
-                if g:IsA("ScreenGui") then
-                    local mb = g:FindFirstChild("ModalButton", true)
-                    if mb and mb.Modal then mb.Modal = false end
-                end
-            end
-        end)
-
-        pcall(function()
-            if not cheat.freecam_enabled and Camera.CameraType == Enum.CameraType.Scriptable then
-                Camera.CameraType = Enum.CameraType.Custom
-            end
-        end)
-
-        pcall(function()
-            task.defer(function()
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then hrp.Anchored = false end
-            end)
-        end)
-
-        if silent_aim._trigger_held then
-            silent_aim._trigger_held = false
-            pcall(function() if mouse1release then mouse1release() end end)
-        end
-
-        pcall(function()
-            local vm = Camera:FindFirstChildOfClass("Model")
-            if vm then
-                for _, p in ipairs(vm:GetDescendants()) do
-                    if p:IsA("BasePart") then p.LocalTransparencyModifier = 0 end
-                end
-            end
-        end)
-
-        task.delay(0.5, function() cheat.is_dead_or_respawning = false end)
+    LocalPlayer.CharacterAdded:Connect(function()
+        cheat.is_dead_or_respawning=true
+        task.delay(0.5, function() cheat.is_dead_or_respawning=false end)
     end)
 
     task.wait()
@@ -9045,12 +8918,8 @@ do
         local char=LocalPlayer.Character; if not char then return end
         local hrp=char:FindFirstChild("HumanoidRootPart")
         if hrp and cheat.real_CFrame then
-            if (hrp.Position - cheat.real_CFrame.Position).Magnitude > 150 then
-                cheat.real_CFrame = nil
-            else
-                local lv=hrp.AssemblyLinearVelocity; local av=hrp.AssemblyAngularVelocity
-                hrp.CFrame=cheat.real_CFrame; hrp.AssemblyLinearVelocity=lv; hrp.AssemblyAngularVelocity=av
-            end
+            local lv=hrp.AssemblyLinearVelocity; local av=hrp.AssemblyAngularVelocity
+            hrp.CFrame=cheat.real_CFrame; hrp.AssemblyLinearVelocity=lv; hrp.AssemblyAngularVelocity=av
         end
     end)
 
@@ -9724,7 +9593,7 @@ do
     AimL:Slider({ Name="FOV Size",             Flag="sa_fov_size",        Min=10,Max=1000,Increment=1, Callback=function(v) silent_aim.fov_size=v end })
     AimL:Slider({ Name="FOV Glow Intensity",   Flag="sa_fov_glow",        Min=1,Max=100,Increment=1, Callback=function(v) silent_aim.fov_glow_intensity=v/10 end })
 
-    -- Player whitelist. Knzx_l is always present as a locked/native entry.
+    -- Player whitelist. Kaene_zy is always present as a locked/native entry.
     local sa_whitelist_dropdown
     do
         local initial_players = {}
@@ -9739,12 +9608,12 @@ do
             Options = initial_players,
             Multi = true,
             Default = {},
-            Locked = { ["Knzx_l"] = true },
+            Locked = { ["Kaene_zy"] = true },
             Callback = function(values)
                 silent_aim.whitelist = {}
                 if type(values) == "table" then
                     for _, name in ipairs(values) do
-                        if name ~= "Knzx_l" then
+                        if name ~= "Kaene_zy" then
                             silent_aim.whitelist[name] = true
                         end
                     end
@@ -9760,13 +9629,6 @@ do
         Callback = function(v)
             silent_aim.whitelist_mode = v
         end
-    })
-
-    AimL:Toggle({
-        Name = "Ignore Friends",
-        Flag = "sa_ignore_friends",
-        Default = false,
-        Callback = function(v) silent_aim_ignore_friends = v end
     })
 
     local function refresh_silent_aim_whitelist()
@@ -9785,13 +9647,13 @@ do
 
         local has_native = false
         for _, name in ipairs(names) do
-            if name == "Knzx_l" then
+            if name == "Kaene_zy" then
                 has_native = true
                 break
             end
         end
         if not has_native then
-            table.insert(names, "Knzx_l")
+            table.insert(names, "Kaene_zy")
             table.sort(names, function(a,b) return string.lower(a) < string.lower(b) end)
         end
 
@@ -9799,7 +9661,7 @@ do
 
         local restored = {}
         for _, name in ipairs(names) do
-            if name ~= "Knzx_l" and selected[name] then
+            if name ~= "Kaene_zy" and selected[name] then
                 table.insert(restored, name)
             end
         end
@@ -9853,142 +9715,6 @@ do
     AimR:Toggle({ Name="Hitscan",              Flag="packetscan_tog",     Callback=function(v) packetscan=v end })
     AimR:Toggle({ Name="Hitscan Walls",        Flag="packetthruscan_tog", Callback=function(v) packetthruscan=v end })
     AimR:Slider({ Name="Shoot Speed Mult",     Flag="shootspeed_slider",  Min=1,Max=30,Increment=1, Default=10, Callback=function(v) shootspeed=v/10 end })
-
--- ============================================================
--- AIMBOT (AIMLOCK) — UI
--- ============================================================
-do
-    local aimbot_fov_circle = cheat.utility.new_drawing("Circle", {
-        Visible = false, Thickness = 1.5, NumSides = 64, Filled = false,
-        Transparency = 0.85, ZIndex = 6
-    })
-
-    local ABL = AimbotCat:Section({ Name = "Aimbot (Aimlock)", Side = 1 })
-    local ABR = AimbotCat:Section({ Name = "Aimbot Options",    Side = 2 })
-
-    ABL:Toggle({
-        Name = "Aimbot (Aimlock)",
-        Flag = "aimbot_on",
-        Callback = function(v) aimbot_enabled = v end
-    }):Keybind({
-        Flag = "aimbot_key", Mode = "Hold", Default = "E",
-        Callback = function(v)
-            if Library.SetFlags["aimbot_on"] then
-                Library.SetFlags["aimbot_on"](v)
-            end
-        end
-    })
-
-    ABL:Dropdown({
-        Name = "Aim Part", Flag = "aimbot_part", Default = "Head",
-        Options = {"Head","UpperTorso","LowerTorso","HumanoidRootPart","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg"},
-        Callback = function(v) aimbot_part = v end
-    })
-
-    ABL:Toggle({
-        Name = "Visible Check", Flag = "aimbot_visible",
-        Default = true,
-        Callback = function(v) aimbot_visible_only = v end
-    })
-
-    ABL:Toggle({
-        Name = "Ignore Friends", Flag = "aimbot_ignore_friends",
-        Default = true,
-        Callback = function(v) aimbot_ignore_friends = v end
-    })
-
-    ABL:Toggle({
-        Name = "Show FOV", Flag = "aimbot_show_fov",
-        Default = false,
-        Callback = function(v) aimbot_show_fov = v end
-    }):Colorpicker({
-        Flag = "aimbot_fov_color",
-        Default = aimbot_fov_color,
-        Callback = function(v) aimbot_fov_color = v end
-    })
-
-    ABL:Slider({
-        Name = "FOV Size", Flag = "aimbot_fov_size",
-        Min = 20, Max = 800, Default = 150, Increment = 1,
-        Callback = function(v) aimbot_fov_size = v end
-    })
-
-    ABR:Slider({
-        Name = "Smoothness", Flag = "aimbot_smooth",
-        Min = 1, Max = 100, Default = 25, Increment = 1,
-        Callback = function(v) aimbot_smoothness = v / 100 end
-    })
-
-    ABR:Slider({
-        Name = "Max Distance", Flag = "aimbot_max_dist",
-        Min = 50, Max = 1000, Default = 500, Increment = 10, Suffix = "m",
-        Callback = function(v) aimbot_max_dist = v end
-    })
-
-    cheat.utility.new_renderstepped(function(delta)
-        if aimbot_show_fov then
-            local vp = Camera.ViewportSize
-            aimbot_fov_circle.Position = Vector2.new(
-                vp.X * 0.5 + GuiInset.X,
-                vp.Y * 0.5 + GuiInset.Y
-            )
-            aimbot_fov_circle.Radius  = aimbot_fov_size
-            aimbot_fov_circle.Color   = aimbot_fov_color
-            aimbot_fov_circle.Visible = true
-        else
-            aimbot_fov_circle.Visible = false
-        end
-
-        if not aimbot_enabled then aimbot_target = nil; return end
-
-        local local_char = LocalPlayer.Character
-        local local_hrp  = local_char and local_char:FindFirstChild("HumanoidRootPart")
-        if not local_hrp then return end
-
-        local vp = Camera.ViewportSize
-        local center = Vector2.new(vp.X * 0.5, vp.Y * 0.5)
-        local best, best_dist = nil, math.huge
-
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and not silent_aim_is_whitelisted(plr) then
-                if aimbot_ignore_friends and aimbot_is_friend(plr) then
-                    -- skip friend
-                else
-                local char = plr.Character
-                local hum  = char and char:FindFirstChildOfClass("Humanoid")
-                local part = char and char:FindFirstChild(aimbot_part)
-                if part and hum and hum.Health > 0 then
-                    local world_m = (part.Position - local_hrp.Position).Magnitude / 3
-                    if world_m <= aimbot_max_dist then
-                        local sp, on_screen = Camera:WorldToViewportPoint(part.Position)
-                        if on_screen and sp.Z > 0 then
-                            local screen_dist = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-                            if screen_dist <= aimbot_fov_size then
-                                if not aimbot_visible_only
-                                   or cheat.utility.is_visible(Camera.CFrame, char, part) then
-                                    if screen_dist < best_dist then
-                                        best = { plr = plr, part = part, char = char }
-                                        best_dist = screen_dist
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                end
-            end
-        end
-
-        aimbot_target = best
-
-        if best then
-            local desired = CFrame.new(Camera.CFrame.Position, best.part.Position)
-            local lerp = math.clamp((1 - aimbot_smoothness) * delta * 30, 0.08, 1)
-            if aimbot_smoothness >= 0.99 then lerp = 1 end
-            Camera.CFrame = Camera.CFrame:Lerp(desired, lerp)
-        end
-    end)
-end
 
     -- Target Info: compact, professional, draggable target panel.
     local TargetInfoGui = Instance.new("ScreenGui")
@@ -10324,38 +10050,36 @@ end
     local fov_glow      = {}
     for i=1,20 do fov_glow[i]=cheat.utility.new_drawing("Circle",{Thickness=1,ZIndex=1,Visible=false}) end
     local _fov_glow_was_visible = false
-    cheat.utility.new_renderstepped(function()
+    cheat.utility.new_renderstepped((function()
         local viewport = Camera.ViewportSize
-        local posScreen = Vector2.new(
-            viewport.X * 0.5 + GuiInset.X,
-            viewport.Y * 0.5 + GuiInset.Y
-        )
-        local posViewport = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
-
+        local pos = Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
         local fov_active = (silent_aim.fov and silent_aim.fov_show) == true
-        CircleInline.Position = posScreen
+        CircleInline.Position = pos
         CircleInline.Radius   = get_silent_fov_radius()
-        TargetLineDot.Position = posScreen
-        TargetLineDot.Color = silent_aim.target_part
-            and (silent_aim.isvisible and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,255,255))
-            or Color3.fromRGB(255,255,255)
+        TargetLineDot.Position = pos
+        TargetLineDot.Color = silent_aim.target_part and (silent_aim.isvisible and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,255,255)) or Color3.fromRGB(255,255,255)
         TargetLineDot.Visible = silent_aim.target_line and silent_aim.target_part ~= nil
 
         if silent_aim.target_line and silent_aim.target_part then
             local target_screen, target_on_screen = Camera:WorldToViewportPoint(silent_aim.target_part.Position)
             if target_on_screen and target_screen.Z > 0 then
-                local target_pos_vp = Vector2.new(target_screen.X, target_screen.Y)
-                local target_pos_screen = Vector2.new(
-                    target_screen.X + GuiInset.X,
-                    target_screen.Y + GuiInset.Y
-                )
-                local delta = target_pos_vp - posViewport
+                local target_pos = Vector2.new(target_screen.X, target_screen.Y)
+                local delta = target_pos - pos
                 local magnitude = delta.Magnitude
 
+                -- If Use FOV is active, the line is allowed only for a target
+                -- inside that exact same FOV circle.
                 local inside_fov = (not silent_aim.fov) or magnitude <= get_silent_fov_radius()
                 if inside_fov then
-                    TargetLine.From = posScreen
-                    TargetLine.To = target_pos_screen
+                    if magnitude > 0.001 then
+                        -- Start exactly at the center. Since the target is now
+                        -- guaranteed to be inside the FOV, this cannot overshoot
+                        -- or appear to originate outside the circle.
+                        TargetLine.From = pos
+                    else
+                        TargetLine.From = pos
+                    end
+                    TargetLine.To = target_pos
                     TargetLine.Color = silent_aim.isvisible and Color3.fromRGB(0,255,0)
                         or (silent_aim.manipulated and Color3.fromRGB(255,255,0) or Color3.fromRGB(255,70,70))
                     TargetLine.Visible = true
@@ -10368,7 +10092,6 @@ end
         else
             TargetLine.Visible = false
         end
-
         CircleInline.Color    = silent_aim.fov_color
         CircleInline.Visible  = fov_active
         local gv = fov_active and silent_aim.fov_outline == true
@@ -10377,30 +10100,28 @@ end
             local th = 1 + (intensity * 0.5)
             for i = 1, 10 do
                 local oc = fov_glow[i]
-                oc.Position     = posScreen
-                oc.Radius       = get_silent_fov_radius() + (i * (intensity * 0.5))
-                oc.Color        = silent_aim.fov_color
-                oc.Transparency = 0.2 - (i * 0.02)
-                oc.Thickness    = th
-                oc.Visible      = true
+                oc.Position    = pos
+                oc.Radius      = get_silent_fov_radius() + (i * (intensity * 0.5))
+                oc.Color       = silent_aim.fov_color
+                oc.Transparency= 0.2 - (i * 0.02)
+                oc.Thickness   = th
+                oc.Visible     = true
                 local ic = fov_glow[i + 10]
-                ic.Position     = posScreen
-                ic.Radius       = math.max(0, get_silent_fov_radius() - (i * (intensity * 0.5)))
-                ic.Color        = silent_aim.fov_color
-                ic.Transparency = 0.2 - (i * 0.02)
-                ic.Thickness    = th
-                ic.Visible      = true
+                ic.Position    = pos
+                ic.Radius      = math.max(0, get_silent_fov_radius() - (i * (intensity * 0.5)))
+                ic.Color       = silent_aim.fov_color
+                ic.Transparency= 0.2 - (i * 0.02)
+                ic.Thickness   = th
+                ic.Visible     = true
             end
             _fov_glow_was_visible = true
         elseif _fov_glow_was_visible then
             for i = 1, 20 do fov_glow[i].Visible = false end
             _fov_glow_was_visible = false
         end
-
         if silent_aim.crosshair_status and silent_aim.target_part then
             CSText.Visible  = true
-            CSText.Position = posScreen + Vector2.new(0, (silent_aim.fov and silent_aim.fov_show)
-                and (get_silent_fov_radius() + 5) or 20)
+            CSText.Position = pos + Vector2.new(0, (silent_aim.fov and silent_aim.fov_show) and (get_silent_fov_radius() + 5) or 20)
             if silent_aim.isvisible then
                 CSText.Text = "visible"; CSText.Color = Color3.new(0,1,0)
             elseif silent_aim.manipulated then
@@ -10411,7 +10132,6 @@ end
         else
             CSText.Visible = false
         end
-    end)
     end))
 end
 
@@ -13029,7 +12749,7 @@ end
 
 
 local _hl_last_size, _hl_last_font
-cheat.utility.new_renderstepped(function()
+cheat.utility.new_renderstepped((function()
     if not cheat.hitlogs_enabled then
         for _, log in ipairs(cheat.hitlogs.active) do
             if log.drawing then log.drawing:Remove() end
@@ -13042,24 +12762,27 @@ cheat.utility.new_renderstepped(function()
     end
 
     local current_time = os.clock()
+    for i = #cheat.hitlogs.pending, 1, -1 do
+        local pending = cheat.hitlogs.pending[i]
+        local is_valid = false
+        local is_resolved = false
 
-    if #cheat.hitlogs.pending > 0 then
-        local pending = cheat.hitlogs.pending[1]
-        local is_valid, is_resolved = false, false
         local current_hp = 0
-
         if pending.hum and pending.hum.Parent then
             current_hp = pending.hum.Parent:GetAttribute("Health") or pending.hum.Health
         else
-            is_valid, is_resolved = true, true
+            is_valid = true
+            is_resolved = true
         end
 
         if not is_resolved and current_hp < pending.start_hp then
-            is_valid, is_resolved = true, true
+            is_valid = true
+            is_resolved = true
         end
 
         if not is_resolved and current_time - pending.tick > 0.4 then
-            is_valid, is_resolved = false, true
+            is_valid = false
+            is_resolved = true
         end
 
         if is_resolved then
@@ -13082,8 +12805,8 @@ cheat.utility.new_renderstepped(function()
                     Position = _Vector2new(-300, cheat.hitlogs_y), Visible = true, ZIndex = 100
                 })
                 table.insert(cheat.hitlogs.active, 1, {
-                    drawing = text, bg = bg, line = line, str = str,
-                    spawn_tick = current_time, target_y = cheat.hitlogs_y, current_x = -300
+                    drawing = text, bg = bg, line = line, str = str, spawn_tick = current_time,
+                    target_y = cheat.hitlogs_y, current_x = -300
                 })
                 while #cheat.hitlogs.active > 5 do
                     local oldlog = table.remove(cheat.hitlogs.active)
@@ -13093,9 +12816,11 @@ cheat.utility.new_renderstepped(function()
                         pcall(function() if oldlog.line then oldlog.line:Remove() end end)
                     end
                 end
+                -- 1 second lock = only ONE log per shot burst
                 cheat._hl_lock_until = current_time + 1.0
             end
             cheat.hitlogs.pending = {}
+            break
         end
     end
 
@@ -13112,27 +12837,31 @@ cheat.utility.new_renderstepped(function()
             if log.current_x < 20 then
                 log.current_x = log.current_x + (20 - log.current_x) * 0.15
             end
+
             local text_bounds = log.drawing.TextBounds
             local box_height = text_bounds.Y + 8
             local box_width = text_bounds.X + 16
+
             log.target_y = base_y + ((i - 1) * (box_height + 4))
             local current_y = log.drawing.Position.Y
             local new_y = current_y + (log.target_y - current_y) * 0.2
             local alpha = 1
             if age > 4 then alpha = 1 - (age - 4) end
+
             log.drawing.Position = _Vector2new(log.current_x + 8, new_y + 4)
             log.drawing.Transparency = alpha
-            if cheat.hitlogs_size ~= _hl_last_size then _hl_last_size = cheat.hitlogs_size; log.drawing.Size = cheat.hitlogs_size end
-            if cheat.hitlogs_font ~= _hl_last_font then _hl_last_font = cheat.hitlogs_font; log.drawing.Font = cheat.hitlogs_font end
+            if cheat.hitlogs_size ~= _hl_last_size then _hl_last_size=cheat.hitlogs_size; log.drawing.Size=cheat.hitlogs_size end
+            if cheat.hitlogs_font ~= _hl_last_font then _hl_last_font=cheat.hitlogs_font; log.drawing.Font=cheat.hitlogs_font end
+
             log.bg.Position = _Vector2new(log.current_x, new_y)
             log.bg.Size = _Vector2new(box_width, box_height)
             log.bg.Transparency = alpha
+
             log.line.Position = _Vector2new(log.current_x, new_y)
             log.line.Size = _Vector2new(3, box_height)
             log.line.Transparency = alpha
         end
     end
-end)
 end))
 
 local random_part_timer = tick()
